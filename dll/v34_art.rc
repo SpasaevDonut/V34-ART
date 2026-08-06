@@ -1,0 +1,38 @@
+#include <windows.h>
+#include <winver.h>
+#include "../include/v34_art_version.h"
+
+V34_ART_ICON_RESOURCE_ID ICON "..\\assets\\art_icon.ico"
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION V34_ART_VERSION_FILE
+ PRODUCTVERSION V34_ART_VERSION_FILE
+ FILEFLAGSMASK 0x3fL
+#ifdef _DEBUG
+ FILEFLAGS VS_FF_DEBUG
+#else
+ FILEFLAGS 0x0L
+#endif
+ FILEOS VOS_NT_WINDOWS32
+ FILETYPE VFT_DLL
+ FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904b0"
+        BEGIN
+            VALUE "CompanyName", V34_ART_COMPANY_NAME "\0"
+            VALUE "FileDescription", V34_ART_PRODUCT_NAME " Recorder\0"
+            VALUE "FileVersion", V34_ART_VERSION_STRING "\0"
+            VALUE "InternalName", "v34_art\0"
+            VALUE "LegalCopyright", V34_ART_COPYRIGHT "\0"
+            VALUE "OriginalFilename", V34_ART_DISTRIBUTION_BASENAME ".dll\0"
+            VALUE "ProductName", V34_ART_PRODUCT_NAME "\0"
+            VALUE "ProductVersion", V34_ART_VERSION_STRING "\0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x0409, 1200
+    END
+END

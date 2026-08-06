@@ -1,0 +1,26 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{BC8A1FFA-BEE3-4634-8014-F334798102B3}") = "v34_art_dll", "dll\v34_art.vcxproj", "{7ED824EA-94AC-43D1-A4A8-82D5B9C30A44}"
+EndProject
+Project("{BC8A1FFA-BEE3-4634-8014-F334798102B3}") = "v34_art_loader", "loader\v34_art_loader.vcxproj", "{44C90B59-CA66-4740-8368-2EFED0EDFD15}"
+EndProject
+Project("{BC8A1FFA-BEE3-4634-8014-F334798102B3}") = "art_logic_tests", "tests\art_logic_tests.vcxproj", "{199525D7-BB72-44CC-84A6-23AC0647D3E3}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Release|Win32 = Release|Win32
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{7ED824EA-94AC-43D1-A4A8-82D5B9C30A44}.Release|Win32.ActiveCfg = Release|Win32
+		{7ED824EA-94AC-43D1-A4A8-82D5B9C30A44}.Release|Win32.Build.0 = Release|Win32
+		{44C90B59-CA66-4740-8368-2EFED0EDFD15}.Release|Win32.ActiveCfg = Release|Win32
+		{44C90B59-CA66-4740-8368-2EFED0EDFD15}.Release|Win32.Build.0 = Release|Win32
+		{199525D7-BB72-44CC-84A6-23AC0647D3E3}.Release|Win32.ActiveCfg = Release|Win32
+		{199525D7-BB72-44CC-84A6-23AC0647D3E3}.Release|Win32.Build.0 = Release|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

@@ -1,0 +1,39 @@
+name: Build and source checks
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-build:
+    runs-on: windows-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Verify repository
+        shell: pwsh
+        run: ./scripts/verify-source.ps1
+
+      - name: Run logic tests
+        shell: pwsh
+        run: ./scripts/test.ps1
+
+      - name: Build Release Win32
+        shell: pwsh
+        run: ./scripts/build.ps1
+
+      - name: Verify release
+        shell: pwsh
+        run: ./scripts/verify-release.ps1
+
+      - name: Upload release archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: v34-art-v1.0
+          path: dist/v34-art-v1.0.zip
+          if-no-files-found: error

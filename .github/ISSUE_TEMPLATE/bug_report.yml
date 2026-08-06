@@ -1,0 +1,58 @@
+name: Bug report
+description: Report a reproducible problem in CS:S V34 ADVANCED RECORDING TOOLS V1.0
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: checkboxes
+    attributes:
+      label: Safety confirmation
+      options:
+        - label: I reproduced this in an offline, local, or demo-rendering environment.
+          required: true
+
+  - type: input
+    attributes:
+      label: Game build
+      description: The console-reported engine build.
+      placeholder: "4044"
+    validations:
+      required: true
+
+  - type: input
+    attributes:
+      label: Resolution
+      placeholder: "1920x1080"
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Description
+      description: What happened, and what did you expect instead?
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Reproduction steps
+      placeholder: |
+        1. Load a demo...
+        2. Run art_preview...
+        3. Run art_start...
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Commands and configuration
+      render: text
+
+  - type: textarea
+    attributes:
+      label: Diagnostic log
+      description: Attach v34_art.log after removing personal filesystem paths.
+
+  - type: textarea
+    attributes:
+      label: Screenshots or recorded frames

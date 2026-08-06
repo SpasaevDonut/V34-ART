@@ -1,0 +1,46 @@
+# Local dependency overrides
+_vendor/
+
+# Build, release, and temporary output
+build/
+dist/
+tmp/
+
+# Visual Studio
+.vs/
+ipch/
+*.aps
+*.db
+*.iobj
+*.ipdb
+*.ncb
+*.obj
+*.opensdf
+*.pdb
+*.sdf
+*.sln.docstates
+*.suo
+*.tlog
+*.user
+*.VC.db
+*.VC.VC.opendb
+
+# Recorder output and diagnostics
+art/
+*.tga
+v34_art.log
+
+# Local tooling and backup files
+.agents/
+.codex/
+.*_backup/
+*.bak
+*.icvar-backup
+*.orig
+*.rej
+*~
+
+# Operating-system files
+.DS_Store
+Desktop.ini
+Thumbs.db
