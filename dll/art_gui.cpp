@@ -2540,7 +2540,10 @@ namespace
 		if ( IsArtGuiVisible() && keyMessage && key == VK_ESCAPE )
 		{
 			if ( keyReleased )
+			{
+				SetHlaeInputWhileGuiActive( false );
 				SetArtGuiVisible( false );
+			}
 			return 0;
 		}
 
@@ -3361,38 +3364,77 @@ namespace
 		g_Gui.demoClockTime = g_pEngine ? g_pEngine->Time() : 0.0f;
 	}
 
+	static int s_nPendingBackwardSeekTick = -1;
+	static DWORD s_dwPendingBackwardSeekTimeout = 0;
+	static DWORD s_dwBackwardSeekStartTime = 0;
+	static bool s_bRewindingToZero = false;
+
 	void UpdateDemoTickTracking()
 	{
-		if ( !g_pEngine || !g_pEngine->IsPlayingDemo() )
+		const bool playingDemo = g_pEngine && g_pEngine->IsPlayingDemo();
+		const bool pausedDemo = playingDemo && g_pEngine->IsPaused();
+
+		if ( !playingDemo )
 		{
 			g_Gui.currentDemoTickValid = false;
 			g_Gui.demoClockTime = g_pEngine ? g_pEngine->Time() : 0.0f;
+			g_Gui.demoWasPlaying = false;
 			return;
 		}
 
 		const float now = g_pEngine->Time();
-		if ( !g_Gui.currentDemoTickValid )
+		const DWORD nowMs = GetTickCount();
+		const bool demoJustStarted = !g_Gui.demoWasPlaying;
+		g_Gui.demoWasPlaying = true;
+
+		if ( demoJustStarted || !g_Gui.currentDemoTickValid )
 		{
-			ResetDemoTickTracking( g_Gui.demoTick, true );
-			return;
+			ScheduleDemoPlayerAutoRefresh( true );
+			MaintainHiddenSpectatorPanels();
+			g_Gui.demoClockTime = now;
+			g_Gui.demoTickFraction = 0.0f;
+			ResetDemoTickTracking( 0, true );
 		}
-		if ( g_pEngine->IsPaused() )
+
+		if ( s_bRewindingToZero )
 		{
+			if ( nowMs > s_dwPendingBackwardSeekTimeout )
+			{
+				s_bRewindingToZero = false;
+				s_nPendingBackwardSeekTick = -1;
+			}
+			else if ( ( nowMs - s_dwBackwardSeekStartTime >= 100 ) && pausedDemo )
+			{
+				s_bRewindingToZero = false;
+				const int target = s_nPendingBackwardSeekTick;
+				s_nPendingBackwardSeekTick = -1;
+				if ( target > 0 )
+				{
+					IssueCommand( "demo_gototick %d 0 1", target );
+				}
+				ResetDemoTickTracking( target, true );
+				g_Gui.demoClockTime = now;
+				return;
+			}
 			g_Gui.demoClockTime = now;
 			return;
 		}
 
-		const float delta = now - g_Gui.demoClockTime;
-		g_Gui.demoClockTime = now;
-		if ( delta < 0.0f || delta > 5.0f )
-			return;
-		g_Gui.demoTickFraction += delta * g_Gui.demoTickRate;
-		const int advancedTicks = static_cast<int>( g_Gui.demoTickFraction );
-		if ( advancedTicks > 0 )
+		if ( !pausedDemo )
 		{
-			g_Gui.currentDemoTick += advancedTicks;
-			g_Gui.demoTickFraction -= advancedTicks;
+			const float delta = now - g_Gui.demoClockTime;
+			if ( delta >= 0.0f && delta <= 0.25f )
+			{
+				g_Gui.demoTickFraction += delta * g_Gui.demoTickRate;
+				const int advancedTicks = static_cast<int>( g_Gui.demoTickFraction );
+				if ( advancedTicks > 0 )
+				{
+					g_Gui.currentDemoTick += advancedTicks;
+					g_Gui.demoTickFraction -= advancedTicks;
+				}
+			}
 		}
+		g_Gui.demoClockTime = now;
 	}
 
 	void LoadDemoFromField()
@@ -3407,6 +3449,8 @@ namespace
 			SetError( "demo name cannot contain quotes, semicolons, or line breaks" );
 			return;
 		}
+		s_bRewindingToZero = false;
+		s_nPendingBackwardSeekTick = -1;
 		LoadDemoTimingMetadata( g_Gui.demoName );
 		ScheduleDemoPlayerAutoRefresh( true );
 		g_Gui.demoTick = 0;
@@ -3418,9 +3462,26 @@ namespace
 	{
 		if ( tick < 0 ) tick = 0;
 		g_Gui.demoTick = tick;
-		ResetDemoTickTracking( tick, true );
-		// Source's third demo_gototick argument pauses playback once the target is reached.
-		IssueCommand( "demo_gototick %d 0 1", g_Gui.demoTick );
+
+		const bool isPlaying = g_pEngine && g_pEngine->IsPlayingDemo();
+		const int curTick = g_Gui.currentDemoTickValid ? g_Gui.currentDemoTick : 0;
+
+		if ( isPlaying && g_Gui.currentDemoTickValid && tick < curTick )
+		{
+			s_nPendingBackwardSeekTick = tick;
+			s_bRewindingToZero = true;
+			s_dwBackwardSeekStartTime = GetTickCount();
+			s_dwPendingBackwardSeekTimeout = s_dwBackwardSeekStartTime + 15000;
+			ResetDemoTickTracking( tick, true );
+			IssueCommand( "demo_gototick 0 0 1" );
+		}
+		else
+		{
+			s_bRewindingToZero = false;
+			s_nPendingBackwardSeekTick = -1;
+			ResetDemoTickTracking( tick, true );
+			IssueCommand( "demo_gototick %d 0 1", g_Gui.demoTick );
+		}
 	}
 
 	void ToggleDemoPlayback( bool paused )
@@ -3446,9 +3507,7 @@ namespace
 		long long target = base + delta;
 		if ( target < 0 ) target = 0;
 		if ( target > 2147483647LL ) target = 2147483647LL;
-		g_Gui.demoTick = static_cast<int>( target );
-		ResetDemoTickTracking( g_Gui.demoTick, true );
-		IssueCommand( "demo_gototick %d 0 1", g_Gui.demoTick );
+		SeekDemoTick( static_cast<int>( target ) );
 	}
 
 
@@ -3549,12 +3608,6 @@ namespace
 
 		const bool playingDemo = g_pEngine && g_pEngine->IsPlayingDemo();
 		const bool pausedDemo = playingDemo && g_pEngine->IsPaused();
-		if ( playingDemo && !g_Gui.demoWasPlaying )
-		{
-			ScheduleDemoPlayerAutoRefresh( true );
-			MaintainHiddenSpectatorPanels();
-		}
-		g_Gui.demoWasPlaying = playingDemo;
 		UpdateDemoPlayerAutoRefresh();
 		ImGui::Text( "Current tick: %s", g_Gui.currentDemoTickValid ? "" : "not available" );
 		if ( g_Gui.currentDemoTickValid )
@@ -4048,7 +4101,7 @@ namespace
 		const bool prefixFinished = ImGui::IsItemDeactivatedAfterEdit();
 		ImGui::SameLine();
 		ImGui::AlignTextToFramePadding();
-		ImGui::TextUnformatted( pPrefixLabel );
+		TextUnformattedSingleLine( pPrefixLabel );
 		if ( prefixSubmitted || prefixFinished )
 			ApplyPrefixField();
 		ImGui::TextWrapped( "Prefix is optional text added before every pass filename. Example: prefix 'shot01' creates shot01_normal_0000.tga; Default creates normal_0000.tga." );
@@ -6576,6 +6629,7 @@ namespace
 	{
 		if ( InterlockedCompareExchange( &g_bArtGuiTerminating, FALSE, FALSE ) )
 			return g_pOriginalEndScene ? g_pOriginalEndScene( pDevice ) : D3D_OK;
+		UpdateDemoTickTracking();
 		if ( InterlockedCompareExchange( &g_nPresentFallbackGuard, 0, 0 ) == 0 )
 		{
 			InterlockedIncrement( &g_nEndSceneHookCalls );

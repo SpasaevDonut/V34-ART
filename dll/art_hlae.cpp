@@ -2849,6 +2849,8 @@ namespace art
 			status.campathLowerBound = g_HlaeCampath.GetLowerBound();
 			status.campathUpperBound = g_HlaeCampath.GetUpperBound();
 		}
+		if ( g_pMirvInput )
+			g_Hlae.inputCamera = g_pMirvInput->GetCameraControlMode();
 		status.inputCamera = g_Hlae.inputCamera;
 		status.inputHasCameraData = g_Hlae.hasLastCamera || g_Hlae.hasGameCamera;
 		const CameraSample &inputCamera = g_Hlae.hasLastCamera ?

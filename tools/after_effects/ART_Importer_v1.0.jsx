@@ -1215,9 +1215,9 @@
 		var normalizedTakeName = String( takeName || "" ).toLowerCase();
 		var score = 0;
 		if ( normalizedTakeName && name === normalizedTakeName + ".agr" ) score += 140;
-		if ( name === "mirv_streams.agr" ) score += 120;
-		if ( name === "afxgamerecord.agr" ) score += 110;
-		if ( name.indexOf( "mirv_streams" ) >= 0 ) score += 60;
+		if ( name === "afxgamerecord.agr" ) score += 120;
+		if ( name === "mirv_agr.agr" ) score += 110;
+		if ( name.indexOf( "afxgamerecord" ) >= 0 ) score += 60;
 		if ( name.indexOf( "gamerecord" ) >= 0 ) score += 50;
 		if ( name.indexOf( "player" ) >= 0 ) score += 25;
 		if ( normalizedTakeName && name.indexOf( normalizedTakeName ) >= 0 ) score += 20;

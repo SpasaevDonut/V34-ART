@@ -1,7 +1,8 @@
-﻿[CmdletBinding()]
+[CmdletBinding()]
 param(
 	[string]$PackageName,
 	[string]$Configuration = "Release",
+	# -StageBuildOutputs: stage direct build binaries into dist before archiving
 	[switch]$StageBuildOutputs
 )
 
