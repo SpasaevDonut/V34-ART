@@ -3,6 +3,7 @@
 #include "art_gui.h"
 #include "art_internal.h"
 #include "art_hlae.h"
+#include "art_ffmpeg.h"
 
 // memdbgon must be the last include file in a .cpp file.
 #include "tier0/memdbgon.h"
@@ -248,6 +249,7 @@ class HidePlayersRenderScope
 		{
 			LogMessage( "RECORDING ERROR: aborting at frame=%d root='%s'", g_nFrame, g_szTakeRoot );
 			InterlockedExchange( &g_bRecording, FALSE );
+			FinishArtFfmpegPipes( true );
 			EndArtHlaeTakeExports();
 			FlushArtWriteQueue( "capture error", true );
 			FinishArtRecordingStatistics( true );
@@ -260,6 +262,7 @@ class HidePlayersRenderScope
 		{
 			LogMessage( "RECORDING ERROR: aborting at frame=%d because GetPlayerView returned no usable view", g_nFrame );
 			InterlockedExchange( &g_bRecording, FALSE );
+			FinishArtFfmpegPipes( true );
 			EndArtHlaeTakeExports();
 			FlushArtWriteQueue( "view setup error", true );
 			FinishArtRecordingStatistics( true );
@@ -448,7 +451,7 @@ class HidePlayersRenderScope
 			if ( previewOnly )
 			{
 				const LONG previewToRender = previewAtEntry == ART_PREVIEW_NONE ? ART_PREVIEW_NORMAL : previewAtEntry;
-		RenderPreviewPass( view, clearFlags, pRect, previewToRender, logRender, "idle" );
+				RenderPreviewPass( view, clearFlags, pRect, previewToRender, logRender, "idle" );
 				InterlockedExchange( &g_bRenderingArt, FALSE );
 				if ( logRender )
 					LogMessage( "RENDER GUARD RELEASED: hook_call=%lu preview_only=1 preview='%s'",

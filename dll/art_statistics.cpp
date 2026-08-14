@@ -3,6 +3,7 @@
 #include "art_internal.h"
 #include "art_gui.h"
 #include "art_logic.h"
+#include "art_ffmpeg.h"
 
 #include <algorithm>
 #include <new>
@@ -282,11 +283,27 @@ namespace art
 				statistics.files, statistics.bytes );
 			AppendJsonEscaped( json, pass.name );
 			json += ",\n      \"filename_pattern\": ";
+			const bool isFfmpegMode = ( InterlockedCompareExchange( &g_nArtOutputMode, 0, 0 ) == ART_OUTPUT_MODE_FFMPEG );
+			const char *pExt = GetArtFfmpegPassOutputExtension( InterlockedCompareExchange( &g_nArtFfmpegPreset, 0, 0 ) );
 			char filenamePattern[128];
-			Q_snprintf( filenamePattern, sizeof( filenamePattern ), "%s%s%s_%%04d.tga",
-				g_ArtRecordingStats.takePrefix[0] ? g_ArtRecordingStats.takePrefix : "",
-				g_ArtRecordingStats.takePrefix[0] ? "_" : "", pass.name );
+			if ( isFfmpegMode )
+			{
+				Q_snprintf( filenamePattern, sizeof( filenamePattern ), "%s%s%s.%s",
+					g_ArtRecordingStats.takePrefix[0] ? g_ArtRecordingStats.takePrefix : "",
+					g_ArtRecordingStats.takePrefix[0] ? "_" : "", pass.name, pExt );
+			}
+			else
+			{
+				Q_snprintf( filenamePattern, sizeof( filenamePattern ), "%s%s%s_%%04d.tga",
+					g_ArtRecordingStats.takePrefix[0] ? g_ArtRecordingStats.takePrefix : "",
+					g_ArtRecordingStats.takePrefix[0] ? "_" : "", pass.name );
+			}
 			AppendJsonEscaped( json, filenamePattern );
+			if ( isFfmpegMode )
+			{
+				json += ",\n      \"format\": \"video\",\n      \"video_file\": ";
+				AppendJsonEscaped( json, filenamePattern );
+			}
 			json += ",\n      \"frame_ranges\": ";
 			AppendFrameRanges( json, g_ExpectedFrames[passIndex] );
 			if ( !Q_stricmp( pass.name, "viewmodel" ) )
@@ -814,9 +831,25 @@ namespace art
 			AppendPassManifest( json, i );
 		json += "\n  ],\n";
 
+		const bool isFfmpegMode = ( InterlockedCompareExchange( &g_nArtOutputMode, 0, 0 ) == ART_OUTPUT_MODE_FFMPEG );
+		const LONG currentPreset = InterlockedCompareExchange( &g_nArtFfmpegPreset, 0, 0 );
 		AppendJsonFormat( json,
 			"  \"pipeline\": {\n"
-			"    \"tga_compression\": \"%s\",\n"
+			"    \"output_mode\": \"%s\",\n"
+			"    \"tga_compression\": \"%s\",\n",
+			isFfmpegMode ? "ffmpeg" : "tga",
+			ArtTgaCompressionModeName( g_ArtRecordingStats.takeTgaCompressionMode ) );
+		if ( isFfmpegMode )
+		{
+			AppendJsonFormat( json,
+				"    \"ffmpeg\": {\n"
+				"      \"preset\": \"%s\",\n"
+				"      \"extension\": \"%s\"\n"
+				"    },\n",
+				GetArtFfmpegPresetName( currentPreset ),
+				GetArtFfmpegPassOutputExtension( currentPreset ) );
+		}
+		AppendJsonFormat( json,
 			"    \"queue_limits\": {\n"
 			"      \"max_files\": %ld,\n"
 			"      \"max_megabytes\": %ld,\n"
@@ -832,7 +865,6 @@ namespace art
 			"    \"uncompressed_bytes\": %I64u,\n"
 			"    \"output_bytes\": %I64u,\n"
 			"    \"timings\": {\n",
-			ArtTgaCompressionModeName( g_ArtRecordingStats.takeTgaCompressionMode ),
 			g_ArtRecordingStats.takeQueueMaxFiles,
 			g_ArtRecordingStats.takeQueueMaxMegabytes,
 			g_ArtRecordingStats.takeQueueReserveMegabytes,

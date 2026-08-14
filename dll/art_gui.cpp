@@ -5,6 +5,7 @@
 #include "art_internal.h"
 #include "art_gui.h"
 #include "art_hlae.h"
+#include "art_ffmpeg.h"
 
 #define DIRECTINPUT_VERSION 0x0800
 #include <d3d9.h>
@@ -159,6 +160,7 @@ namespace
 		bool waitingForHlaeInputHoldKey;
 		bool experimentalOptionsEnabled;
 		bool autoPauseDemoAfterRecording;
+		bool autoResumeDemoOnRecordingStart;
 		bool showCaptureHelp;
 		bool showHlaeCampathHelp;
 		bool showHlaeInputHelp;
@@ -216,6 +218,10 @@ namespace
 		char commandFilter[64];
 		char lastError[256];
 		char previousMouseEnable[32];
+		char ffmpegPath[MAX_PATH];
+		char ffmpegCustomArgs[1024];
+		ArtFfmpegTestResult ffmpegTestResult;
+		bool ffmpegTestPerformed;
 		std::vector<std::string> configs;
 		std::vector<TakeEntry> takes;
 		std::vector<std::string> demos;
@@ -227,7 +233,7 @@ namespace
 			  mouseStateStored( false ), refreshConfigs( true ), refreshTakes( true ),
 			  refreshDemos( true ), refreshDemoPlayers( true ),
 			  demoWasPlaying( false ), spectatorUiHidden( false ),
-			  configSelectionChanged( false ),
+			  configSelectionChanged( false ), ffmpegTestPerformed( false ),
 			  selectedPage( 0 ), selectedConfig( -1 ), selectedTake( -1 ),
 			  selectedDemo( -1 ), selectedDemoPlayer( -1 ),
 			  spectatorMode( 3 ), demoPlayerRefreshAttempts( 0 ),
@@ -237,6 +243,7 @@ namespace
 			  toggleKey( VK_F3 ), toggleModifiers( TOGGLE_MODIFIER_SHIFT ), waitingForToggleKey( false ),
 			  hlaeInputHoldKey( VK_LBUTTON ), waitingForHlaeInputHoldKey( false ),
 			  experimentalOptionsEnabled( false ), autoPauseDemoAfterRecording( false ),
+			  autoResumeDemoOnRecordingStart( false ),
 			  showCaptureHelp( false ), showHlaeCampathHelp( false ),
 			  showHlaeInputHelp( false ), resetInfoScroll( false ),
 			  globalFov( 90.0f ), globalFovDefault( true )
@@ -1629,6 +1636,7 @@ namespace
 			"art_gui_key SHIFT+F3\r\n"
 			"art_gui_experimental off\r\n"
 			"art_demo_pause_after_recording off\r\n"
+			"art_demo_unpause_on_recording off\r\n"
 			"art_hlae enabled 1\r\n"
 			"art_hlae autoExport agr 0\r\n"
 			"art_hlae autoExport camio 0\r\n"
@@ -1789,6 +1797,8 @@ namespace
 			g_Gui.experimentalOptionsEnabled ? "on" : "off" );
 		AppendFormat( cfg, "art_demo_pause_after_recording %s\r\n",
 			g_Gui.autoPauseDemoAfterRecording ? "on" : "off" );
+		AppendFormat( cfg, "art_demo_unpause_on_recording %s\r\n",
+			g_Gui.autoResumeDemoOnRecordingStart ? "on" : "off" );
 		AppendFormat( cfg, "art_hlae_input_while_gui %s\r\n",
 			g_Gui.hlaeInputWhileGui ? "on" : "off" );
 		char hlaeInputHoldKey[32];
@@ -2540,7 +2550,10 @@ namespace
 		if ( IsArtGuiVisible() && keyMessage && key == VK_ESCAPE )
 		{
 			if ( keyReleased )
+			{
+				SetHlaeInputWhileGuiActive( false );
 				SetArtGuiVisible( false );
+			}
 			return 0;
 		}
 
@@ -2685,6 +2698,8 @@ namespace
 	{
 		Q_strncpy( g_Gui.outputPath, g_szRecordBase, sizeof( g_Gui.outputPath ) );
 		Q_strncpy( g_Gui.prefix, g_szCapturePrefix, sizeof( g_Gui.prefix ) );
+		Q_strncpy( g_Gui.ffmpegPath, g_szArtFfmpegPath, sizeof( g_Gui.ffmpegPath ) );
+		Q_strncpy( g_Gui.ffmpegCustomArgs, g_szArtFfmpegCustomArgs, sizeof( g_Gui.ffmpegCustomArgs ) );
 		ConVar *pHost = g_pCvar ? g_pCvar->FindVar( "host_framerate" ) : NULL;
 		g_Gui.hostFramerate = pHost ? pHost->GetInt() : 0;
 	}
@@ -2708,6 +2723,22 @@ namespace
 			IssueCommand( "art_prefix %s", g_Gui.prefix );
 		else
 			SetError( "prefix may contain only letters, numbers, '_' and '-'" );
+	}
+
+	void ApplyFfmpegPathField()
+	{
+		if ( !g_Gui.ffmpegPath[0] || !Q_stricmp( g_Gui.ffmpegPath, "default" ) )
+			IssueCommand( "art_ffmpeg_path default" );
+		else if ( IsSafeQuotedArgument( g_Gui.ffmpegPath ) )
+			IssueCommand( "art_ffmpeg_path \"%s\"", g_Gui.ffmpegPath );
+		else
+			SetError( "FFmpeg path cannot contain quotes or semicolons" );
+	}
+
+	void ApplyFfmpegCustomArgsField()
+	{
+		if ( g_Gui.ffmpegCustomArgs[0] )
+			IssueCommand( "art_ffmpeg_custom %s", g_Gui.ffmpegCustomArgs );
 	}
 
 	HWND ResolveGameWindow( HWND hFocusWindow )
@@ -3361,38 +3392,77 @@ namespace
 		g_Gui.demoClockTime = g_pEngine ? g_pEngine->Time() : 0.0f;
 	}
 
+	static int s_nPendingBackwardSeekTick = -1;
+	static DWORD s_dwPendingBackwardSeekTimeout = 0;
+	static DWORD s_dwBackwardSeekStartTime = 0;
+	static bool s_bRewindingToZero = false;
+
 	void UpdateDemoTickTracking()
 	{
-		if ( !g_pEngine || !g_pEngine->IsPlayingDemo() )
+		const bool playingDemo = g_pEngine && g_pEngine->IsPlayingDemo();
+		const bool pausedDemo = playingDemo && g_pEngine->IsPaused();
+
+		if ( !playingDemo )
 		{
 			g_Gui.currentDemoTickValid = false;
 			g_Gui.demoClockTime = g_pEngine ? g_pEngine->Time() : 0.0f;
+			g_Gui.demoWasPlaying = false;
 			return;
 		}
 
 		const float now = g_pEngine->Time();
-		if ( !g_Gui.currentDemoTickValid )
+		const DWORD nowMs = GetTickCount();
+		const bool demoJustStarted = !g_Gui.demoWasPlaying;
+		g_Gui.demoWasPlaying = true;
+
+		if ( demoJustStarted || !g_Gui.currentDemoTickValid )
 		{
-			ResetDemoTickTracking( g_Gui.demoTick, true );
-			return;
+			ScheduleDemoPlayerAutoRefresh( true );
+			MaintainHiddenSpectatorPanels();
+			g_Gui.demoClockTime = now;
+			g_Gui.demoTickFraction = 0.0f;
+			ResetDemoTickTracking( 0, true );
 		}
-		if ( g_pEngine->IsPaused() )
+
+		if ( s_bRewindingToZero )
 		{
+			if ( nowMs > s_dwPendingBackwardSeekTimeout )
+			{
+				s_bRewindingToZero = false;
+				s_nPendingBackwardSeekTick = -1;
+			}
+			else if ( ( nowMs - s_dwBackwardSeekStartTime >= 100 ) && pausedDemo )
+			{
+				s_bRewindingToZero = false;
+				const int target = s_nPendingBackwardSeekTick;
+				s_nPendingBackwardSeekTick = -1;
+				if ( target > 0 )
+				{
+					IssueCommand( "demo_gototick %d 0 1", target );
+				}
+				ResetDemoTickTracking( target, true );
+				g_Gui.demoClockTime = now;
+				return;
+			}
 			g_Gui.demoClockTime = now;
 			return;
 		}
 
-		const float delta = now - g_Gui.demoClockTime;
-		g_Gui.demoClockTime = now;
-		if ( delta < 0.0f || delta > 5.0f )
-			return;
-		g_Gui.demoTickFraction += delta * g_Gui.demoTickRate;
-		const int advancedTicks = static_cast<int>( g_Gui.demoTickFraction );
-		if ( advancedTicks > 0 )
+		if ( !pausedDemo )
 		{
-			g_Gui.currentDemoTick += advancedTicks;
-			g_Gui.demoTickFraction -= advancedTicks;
+			const float delta = now - g_Gui.demoClockTime;
+			if ( delta >= 0.0f && delta <= 0.25f )
+			{
+				g_Gui.demoTickFraction += delta * g_Gui.demoTickRate;
+				const int advancedTicks = static_cast<int>( g_Gui.demoTickFraction );
+				if ( advancedTicks > 0 )
+				{
+					g_Gui.currentDemoTick += advancedTicks;
+					g_Gui.demoTickFraction -= advancedTicks;
+				}
+			}
 		}
+		g_Gui.demoClockTime = now;
 	}
 
 	void LoadDemoFromField()
@@ -3407,6 +3477,8 @@ namespace
 			SetError( "demo name cannot contain quotes, semicolons, or line breaks" );
 			return;
 		}
+		s_bRewindingToZero = false;
+		s_nPendingBackwardSeekTick = -1;
 		LoadDemoTimingMetadata( g_Gui.demoName );
 		ScheduleDemoPlayerAutoRefresh( true );
 		g_Gui.demoTick = 0;
@@ -3418,9 +3490,26 @@ namespace
 	{
 		if ( tick < 0 ) tick = 0;
 		g_Gui.demoTick = tick;
-		ResetDemoTickTracking( tick, true );
-		// Source's third demo_gototick argument pauses playback once the target is reached.
-		IssueCommand( "demo_gototick %d 0 1", g_Gui.demoTick );
+
+		const bool isPlaying = g_pEngine && g_pEngine->IsPlayingDemo();
+		const int curTick = g_Gui.currentDemoTickValid ? g_Gui.currentDemoTick : 0;
+
+		if ( isPlaying && g_Gui.currentDemoTickValid && tick < curTick )
+		{
+			s_nPendingBackwardSeekTick = tick;
+			s_bRewindingToZero = true;
+			s_dwBackwardSeekStartTime = GetTickCount();
+			s_dwPendingBackwardSeekTimeout = s_dwBackwardSeekStartTime + 15000;
+			ResetDemoTickTracking( tick, true );
+			IssueCommand( "demo_gototick 0 0 1" );
+		}
+		else
+		{
+			s_bRewindingToZero = false;
+			s_nPendingBackwardSeekTick = -1;
+			ResetDemoTickTracking( tick, true );
+			IssueCommand( "demo_gototick %d 0 1", g_Gui.demoTick );
+		}
 	}
 
 	void ToggleDemoPlayback( bool paused )
@@ -3446,9 +3535,7 @@ namespace
 		long long target = base + delta;
 		if ( target < 0 ) target = 0;
 		if ( target > 2147483647LL ) target = 2147483647LL;
-		g_Gui.demoTick = static_cast<int>( target );
-		ResetDemoTickTracking( g_Gui.demoTick, true );
-		IssueCommand( "demo_gototick %d 0 1", g_Gui.demoTick );
+		SeekDemoTick( static_cast<int>( target ) );
 	}
 
 
@@ -3463,10 +3550,22 @@ namespace
 		ImGui::Separator();
 		ImGui::Spacing();
 
-		ImGui::BeginChild( "capture_card", ImVec2( 0, 176 ), ImGuiChildFlags_Borders );
+		ImGui::BeginChild( "capture_card", ImVec2( 0, 0 ),
+			ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY );
 		StatusBadge( recording, "RECORDING", "IDLE" );
 		ImGui::SameLine();
 		TextDisabledWrapped( "Frame %d", g_nFrame );
+		ImGui::SameLine();
+		const LONG currentOutputMode = InterlockedCompareExchange( &g_nArtOutputMode, 0, 0 );
+		if ( currentOutputMode == ART_OUTPUT_MODE_FFMPEG )
+		{
+			const LONG currentPreset = InterlockedCompareExchange( &g_nArtFfmpegPreset, 0, 0 );
+			ImGui::TextColored( ImVec4( 0.35f, 0.80f, 1.00f, 1.0f ), "[FFmpeg: %s]", GetArtFfmpegPresetName( currentPreset ) );
+		}
+		else
+		{
+			ImGui::TextColored( ImVec4( 0.70f, 0.70f, 0.70f, 1.0f ), "[TGA Frames]" );
+		}
 		TextDisabledWrapped( "The menu does not show on recorded footage." );
 		ImGui::Spacing();
 		ImGui::SetNextItemWidth( -1 );
@@ -3537,6 +3636,7 @@ namespace
 				InterlockedCompareExchange( &g_ArtValidationProgress.completedFiles, 0, 0 ),
 				InterlockedCompareExchange( &g_ArtValidationProgress.totalFiles, 0, 0 ) );
 		}
+
 		ImGui::EndChild();
 
 		ImGui::Spacing();
@@ -3549,12 +3649,6 @@ namespace
 
 		const bool playingDemo = g_pEngine && g_pEngine->IsPlayingDemo();
 		const bool pausedDemo = playingDemo && g_pEngine->IsPaused();
-		if ( playingDemo && !g_Gui.demoWasPlaying )
-		{
-			ScheduleDemoPlayerAutoRefresh( true );
-			MaintainHiddenSpectatorPanels();
-		}
-		g_Gui.demoWasPlaying = playingDemo;
 		UpdateDemoPlayerAutoRefresh();
 		ImGui::Text( "Current tick: %s", g_Gui.currentDemoTickValid ? "" : "not available" );
 		if ( g_Gui.currentDemoTickValid )
@@ -3627,6 +3721,13 @@ namespace
 		if ( ImGui::Button( "+100", ImVec2( 72, 0 ) ) ) JumpDemoTick( 100 );
 		ImGui::SameLine();
 		if ( ImGui::Button( "+1000", ImVec2( 72, 0 ) ) ) JumpDemoTick( 1000 );
+
+		ImGui::Spacing();
+		bool autoResume = g_Gui.autoResumeDemoOnRecordingStart;
+		if ( ImGui::Checkbox( "Unpause demo on recording start", &autoResume ) )
+		{
+			IssueCommand( "art_demo_unpause_on_recording %s", autoResume ? "on" : "off" );
+		}
 
 		ImGui::Separator();
 		TextUnformattedWrapped( "Spectator" );
@@ -4048,7 +4149,7 @@ namespace
 		const bool prefixFinished = ImGui::IsItemDeactivatedAfterEdit();
 		ImGui::SameLine();
 		ImGui::AlignTextToFramePadding();
-		ImGui::TextUnformatted( pPrefixLabel );
+		TextUnformattedSingleLine( pPrefixLabel );
 		if ( prefixSubmitted || prefixFinished )
 			ApplyPrefixField();
 		ImGui::TextWrapped( "Prefix is optional text added before every pass filename. Example: prefix 'shot01' creates shot01_normal_0000.tga; Default creates normal_0000.tga." );
@@ -4086,57 +4187,156 @@ namespace
 			TextDisabledWrapped( "The current take uses the metadata setting captured when recording started." );
 
 		ImGui::Spacing();
-		TextUnformattedWrapped( "Capture pipeline safety" );
+		TextUnformattedWrapped( "Output format & video encoding" );
 		ImGui::Separator();
-		LONG compressionMode = InterlockedCompareExchange( &g_nArtTgaCompressionMode, 0, 0 );
-		int compressionSelection = compressionMode >= ART_TGA_COMPRESSION_OFF &&
-			compressionMode <= ART_TGA_COMPRESSION_RLE ? static_cast<int>( compressionMode ) :
-			ART_TGA_COMPRESSION_AUTO;
-		static const char *compressionNames[] = { "Off (uncompressed)", "Auto (smaller result)", "RLE (always)" };
-		ImGui::SetNextItemWidth( 245 );
-		if ( ImGui::Combo( "TGA compression", &compressionSelection,
-			compressionNames, ARRAYSIZE( compressionNames ) ) )
-			IssueCommand( "art_tga_compression %s",
-				ArtTgaCompressionModeName( compressionSelection ) );
+		ImGui::Spacing();
 
-		int maxFiles = static_cast<int>( InterlockedCompareExchange(
-			&g_ArtQueueOptions.maxFiles, 0, 0 ) );
-		int maxMegabytes = static_cast<int>( InterlockedCompareExchange(
-			&g_ArtQueueOptions.maxMegabytes, 0, 0 ) );
-		int reserveMegabytes = static_cast<int>( InterlockedCompareExchange(
-			&g_ArtQueueOptions.reserveMegabytes, 0, 0 ) );
-		ImGui::SetNextItemWidth( 125 );
-		if ( ImGui::InputInt( "Maximum queued files", &maxFiles ) )
+		LONG outputMode = InterlockedCompareExchange( &g_nArtOutputMode, 0, 0 );
+		int modeSelection = ( outputMode == ART_OUTPUT_MODE_FFMPEG ) ? 1 : 0;
+		static const char *outputModeNames[] = { "Image sequences (TGA frames)", "Direct video stream (FFmpeg)" };
+		ImGui::SetNextItemWidth( 320 );
+		ImGui::BeginDisabled( recording );
+		if ( ImGui::Combo( "Capture format", &modeSelection, outputModeNames, ARRAYSIZE( outputModeNames ) ) )
 		{
-			if ( maxFiles < 1 ) maxFiles = 1;
-			if ( maxFiles > 512 ) maxFiles = 512;
-			IssueCommand( "art_queue max_files %d", maxFiles );
+			IssueCommand( "art_output_mode %s", modeSelection == 1 ? "ffmpeg" : "tga" );
 		}
-		ImGui::SetNextItemWidth( 125 );
-		if ( ImGui::InputInt( "Maximum queued MiB", &maxMegabytes ) )
+		ImGui::EndDisabled();
+
+		if ( modeSelection == 1 )
 		{
-			if ( maxMegabytes < 16 ) maxMegabytes = 16;
-			if ( maxMegabytes > 1024 ) maxMegabytes = 1024;
-			IssueCommand( "art_queue max_mb %d", maxMegabytes );
+			ImGui::Spacing();
+			char resolvedPath[MAX_PATH];
+			bool foundOnDisk = false;
+			ResolveArtFfmpegExecutablePath( resolvedPath, sizeof( resolvedPath ), &foundOnDisk );
+
+			TextUnformattedWrapped( "FFmpeg executable:" );
+			ImGui::SameLine();
+			if ( foundOnDisk )
+				ImGui::TextColored( ImVec4( 0.25f, 0.90f, 0.35f, 1.0f ), "[FOUND ON DISK]" );
+			else
+				ImGui::TextColored( ImVec4( 1.0f, 0.45f, 0.30f, 1.0f ), "[NOT FOUND ON DISK]" );
+
+			ImGui::BeginDisabled( recording );
+			ImGui::SetNextItemWidth( ImGui::GetContentRegionAvail().x - 130.0f );
+			const bool pathSubmitted = ImGui::InputTextWithHint( "##ffmpeg_path", "ffmpeg.exe or full path",
+				g_Gui.ffmpegPath, sizeof( g_Gui.ffmpegPath ), ImGuiInputTextFlags_EnterReturnsTrue );
+			if ( pathSubmitted || ImGui::IsItemDeactivatedAfterEdit() )
+				ApplyFfmpegPathField();
+			ImGui::SameLine();
+			if ( ImGui::Button( "Auto-detect", ImVec2( 120, 0 ) ) )
+			{
+				IssueCommand( "art_ffmpeg_path default" );
+				SyncTextFieldsFromGame();
+			}
+			ImGui::EndDisabled();
+
+			TextDisabledWrapped( "Active executable: %s", resolvedPath[0] ? resolvedPath : "unknown" );
+			TextDisabledWrapped( "Note: You can place ffmpeg.exe next to the loader / DLL, in the game folder (cstrike), or system PATH." );
+
+			ImGui::Spacing();
+			LONG currentPreset = InterlockedCompareExchange( &g_nArtFfmpegPreset, 0, 0 );
+			int presetSelection = ( currentPreset >= 0 && currentPreset < GetArtFfmpegPresetCount() ) ? static_cast<int>( currentPreset ) : 0;
+
+			const char *presetNames[ART_FFMPEG_PRESET_COUNT];
+			for ( int i = 0; i < GetArtFfmpegPresetCount(); ++i )
+				presetNames[i] = GetArtFfmpegPresetInfo( i )->displayName;
+
+			ImGui::SetNextItemWidth( 420 );
+			ImGui::BeginDisabled( recording );
+			if ( ImGui::Combo( "Encoding preset", &presetSelection, presetNames, ARRAYSIZE( presetNames ) ) )
+			{
+				IssueCommand( "art_ffmpeg_preset %s", GetArtFfmpegPresetInfo( presetSelection )->name );
+			}
+			ImGui::EndDisabled();
+
+			const ArtFfmpegPresetInfo *pPresetInfo = GetArtFfmpegPresetInfo( presetSelection );
+			ImGui::TextColored( ImVec4( 0.85f, 0.85f, 0.85f, 1.0f ), "%s", pPresetInfo->description );
+
+			if ( presetSelection == ART_FFMPEG_PRESET_CUSTOM )
+			{
+				ImGui::Spacing();
+				TextUnformattedWrapped( "Custom arguments template:" );
+				ImGui::BeginDisabled( recording );
+				ImGui::SetNextItemWidth( -1 );
+				const bool customSubmitted = ImGui::InputText( "##ffmpeg_custom",
+					g_Gui.ffmpegCustomArgs, sizeof( g_Gui.ffmpegCustomArgs ), ImGuiInputTextFlags_EnterReturnsTrue );
+				if ( customSubmitted || ImGui::IsItemDeactivatedAfterEdit() )
+					ApplyFfmpegCustomArgsField();
+				ImGui::EndDisabled();
+				TextDisabledWrapped( "Supported tags: {WIDTH}, {HEIGHT}, {FPS}, {PASS}, {OUTPUT_FILE}, {TAKE_DIR}, {TAKE_NAME}, {FFMPEG}" );
+			}
+
+			ImGui::Spacing();
+			if ( ImGui::Button( "Test FFmpeg setup", ImVec2( 170, 32 ) ) )
+			{
+				RunArtFfmpegTest( g_Gui.ffmpegTestResult );
+				g_Gui.ffmpegTestPerformed = true;
+			}
+			if ( g_Gui.ffmpegTestPerformed )
+			{
+				ImGui::SameLine();
+				if ( g_Gui.ffmpegTestResult.success )
+					ImGui::TextColored( ImVec4( 0.25f, 0.90f, 0.35f, 1.0f ), "%s", g_Gui.ffmpegTestResult.message );
+				else
+					ImGui::TextColored( ImVec4( 1.0f, 0.35f, 0.35f, 1.0f ), "%s", g_Gui.ffmpegTestResult.message );
+			}
 		}
-		ImGui::SetNextItemWidth( 125 );
-		if ( ImGui::InputInt( "Required virtual-memory reserve MiB", &reserveMegabytes ) )
+
+		if ( modeSelection == 0 )
 		{
-			if ( reserveMegabytes < 64 ) reserveMegabytes = 64;
-			if ( reserveMegabytes > 1024 ) reserveMegabytes = 1024;
-			IssueCommand( "art_queue reserve_mb %d", reserveMegabytes );
+			ImGui::Spacing();
+			TextUnformattedWrapped( "Capture pipeline safety (TGA mode)" );
+			ImGui::Separator();
+			LONG compressionMode = InterlockedCompareExchange( &g_nArtTgaCompressionMode, 0, 0 );
+			int compressionSelection = compressionMode >= ART_TGA_COMPRESSION_OFF &&
+				compressionMode <= ART_TGA_COMPRESSION_RLE ? static_cast<int>( compressionMode ) :
+				ART_TGA_COMPRESSION_AUTO;
+			static const char *compressionNames[] = { "Off (uncompressed)", "Auto (smaller result)", "RLE (always)" };
+			ImGui::SetNextItemWidth( 245 );
+			if ( ImGui::Combo( "TGA compression", &compressionSelection,
+				compressionNames, ARRAYSIZE( compressionNames ) ) )
+				IssueCommand( "art_tga_compression %s",
+					ArtTgaCompressionModeName( compressionSelection ) );
+
+			int maxFiles = static_cast<int>( InterlockedCompareExchange(
+				&g_ArtQueueOptions.maxFiles, 0, 0 ) );
+			int maxMegabytes = static_cast<int>( InterlockedCompareExchange(
+				&g_ArtQueueOptions.maxMegabytes, 0, 0 ) );
+			int reserveMegabytes = static_cast<int>( InterlockedCompareExchange(
+				&g_ArtQueueOptions.reserveMegabytes, 0, 0 ) );
+			ImGui::SetNextItemWidth( 125 );
+			if ( ImGui::InputInt( "Maximum queued files", &maxFiles ) )
+			{
+				if ( maxFiles < 1 ) maxFiles = 1;
+				if ( maxFiles > 512 ) maxFiles = 512;
+				IssueCommand( "art_queue max_files %d", maxFiles );
+			}
+			ImGui::SetNextItemWidth( 125 );
+			if ( ImGui::InputInt( "Maximum queued MiB", &maxMegabytes ) )
+			{
+				if ( maxMegabytes < 16 ) maxMegabytes = 16;
+				if ( maxMegabytes > 1024 ) maxMegabytes = 1024;
+				IssueCommand( "art_queue max_mb %d", maxMegabytes );
+			}
+			ImGui::SetNextItemWidth( 125 );
+			if ( ImGui::InputInt( "Required virtual-memory reserve MiB", &reserveMegabytes ) )
+			{
+				if ( reserveMegabytes < 64 ) reserveMegabytes = 64;
+				if ( reserveMegabytes > 1024 ) reserveMegabytes = 1024;
+				IssueCommand( "art_queue reserve_mb %d", reserveMegabytes );
+			}
+			char pendingQueueBytes[48];
+			FormatArtByteCount( g_ArtPipelineStats.pendingBytes,
+				pendingQueueBytes, sizeof( pendingQueueBytes ) );
+			ImGui::Text( "Pending upper bound: %lu files | %s | take flushes: %lu",
+				g_ArtPipelineStats.pendingFiles, pendingQueueBytes, g_ArtPipelineStats.takeFlushes );
+			if ( ImGui::Button( "Flush queued writes", ImVec2( 170, 30 ) ) )
+				IssueCommandWithSeparator( "art_queue flush" );
+			ImGui::SameLine();
+			if ( ImGui::Button( "Restore safety defaults", ImVec2( 180, 30 ) ) )
+				IssueCommand( "art_queue default" );
+			TextDisabledWrapped( "ART pauses when a queue limit or memory reserve is reached, then continues safely." );
 		}
-		char pendingQueueBytes[48];
-		FormatArtByteCount( g_ArtPipelineStats.pendingBytes,
-			pendingQueueBytes, sizeof( pendingQueueBytes ) );
-		ImGui::Text( "Pending upper bound: %lu files | %s | take flushes: %lu",
-			g_ArtPipelineStats.pendingFiles, pendingQueueBytes, g_ArtPipelineStats.takeFlushes );
-		if ( ImGui::Button( "Flush queued writes", ImVec2( 170, 30 ) ) )
-			IssueCommandWithSeparator( "art_queue flush" );
-		ImGui::SameLine();
-		if ( ImGui::Button( "Restore safety defaults", ImVec2( 180, 30 ) ) )
-			IssueCommand( "art_queue default" );
-		TextDisabledWrapped( "ART pauses when a queue limit or memory reserve is reached, then continues safely." );
 
 		ImGui::Spacing();
 		TextUnformattedWrapped( "Takes" );
@@ -5645,7 +5845,7 @@ namespace
 
 		ImGui::Spacing();
 		const float advancedSettingsHeight =
-			g_Gui.experimentalOptionsEnabled ? 230.0f : 180.0f;
+			g_Gui.experimentalOptionsEnabled ? 280.0f : 230.0f;
 		ImGui::BeginChild( "advanced_settings", ImVec2( 0, advancedSettingsHeight ), ImGuiChildFlags_Borders );
 		TextUnformattedWrapped( "Diagnostics and experimental" );
 		bool statisticsOverlay = InterlockedCompareExchange(
@@ -5653,6 +5853,11 @@ namespace
 		if ( ImGui::Checkbox( "In-game recording statistics overlay", &statisticsOverlay ) )
 			IssueCommand( "art_overlay %s", statisticsOverlay ? "on" : "off" );
 		TextDisabledWrapped( "Orange while idle, red while recording; excluded from recorded TGAs." );
+		ImGui::Separator();
+		bool autoResumeDemo = g_Gui.autoResumeDemoOnRecordingStart;
+		if ( ImGui::Checkbox( "Unpause demo on recording start", &autoResumeDemo ) )
+			IssueCommand( "art_demo_unpause_on_recording %s", autoResumeDemo ? "on" : "off" );
+		TextDisabledWrapped( "Automatically executes demo_resume when recording starts." );
 		ImGui::Separator();
 		bool experimentalOptionsEnabled = g_Gui.experimentalOptionsEnabled;
 		if ( ImGui::Checkbox( "Enable experimental options", &experimentalOptionsEnabled ) )
@@ -6576,6 +6781,7 @@ namespace
 	{
 		if ( InterlockedCompareExchange( &g_bArtGuiTerminating, FALSE, FALSE ) )
 			return g_pOriginalEndScene ? g_pOriginalEndScene( pDevice ) : D3D_OK;
+		UpdateDemoTickTracking();
 		if ( InterlockedCompareExchange( &g_nPresentFallbackGuard, 0, 0 ) == 0 )
 		{
 			InterlockedIncrement( &g_nEndSceneHookCalls );
@@ -7739,6 +7945,27 @@ namespace
 			g_Gui.experimentalOptionsEnabled ? "" : " (inactive until experimental options are enabled)" );
 	}
 
+	void ArtDemoUnpauseOnRecording_f()
+	{
+		const int argc = g_pEngine ? g_pEngine->Cmd_Argc() : 0;
+		if ( argc <= 1 )
+		{
+			ArtConsoleMessage( "art_demo_unpause_on_recording is %s. Usage: art_demo_unpause_on_recording <on|off>.\n",
+				g_Gui.autoResumeDemoOnRecordingStart ? "on" : "off" );
+			return;
+		}
+		if ( argc != 2 || ( !IsTruthy( g_pEngine->Cmd_Argv( 1 ) ) &&
+			!IsFalsy( g_pEngine->Cmd_Argv( 1 ) ) ) )
+		{
+			ArtConsoleMessage( "Usage: art_demo_unpause_on_recording <on|off>.\n" );
+			return;
+		}
+
+		g_Gui.autoResumeDemoOnRecordingStart = IsTruthy( g_pEngine->Cmd_Argv( 1 ) );
+		ArtConsoleMessage( "art_demo_unpause_on_recording: %s.\n",
+			g_Gui.autoResumeDemoOnRecordingStart ? "on" : "off" );
+	}
+
 	void ArtPlayersThroughWalls_f()
 	{
 		const int argc = g_pEngine ? g_pEngine->Cmd_Argc() : 0;
@@ -8102,6 +8329,9 @@ namespace
 	ConCommand g_ArtDemoPauseAfterRecordingCommand( "art_demo_pause_after_recording",
 		ArtDemoPauseAfterRecording_f,
 		"Pause demo playback automatically when recording stops (experimental)." );
+	ConCommand g_ArtDemoUnpauseOnRecordingCommand( "art_demo_unpause_on_recording",
+		ArtDemoUnpauseOnRecording_f,
+		"Unpause demo playback automatically when recording starts." );
 	ConCommand g_ArtChamsCommand( "art_chams", ArtChams_f,
 		"Enable flat colors for players, viewmodel, and skybox." );
 	ConCommand g_ArtPlayersThroughWallsCommand( "art_players_through_walls", ArtPlayersThroughWalls_f,
@@ -8170,6 +8400,16 @@ bool PauseArtDemoAfterRecordingIfEnabled()
 	}
 	IssueCommand( "demo_pause" );
 	LogMessage( "DEMO AUTO-PAUSE REQUESTED: reason=recording_stopped experimental=1" );
+	return true;
+}
+
+bool ResumeArtDemoBeforeRecordingIfEnabled()
+{
+	if ( !g_Gui.autoResumeDemoOnRecordingStart || !g_pEngine || !g_pEngine->IsPlayingDemo() )
+		return false;
+
+	IssueCommand( "demo_resume" );
+	LogMessage( "DEMO AUTO-RESUME REQUESTED: reason=recording_started" );
 	return true;
 }
 
@@ -8410,6 +8650,7 @@ bool InstallArtGui()
 	RegisterGuiCommand( &g_ArtHlaeInputWhileGuiCommand );
 	RegisterGuiCommand( &g_ArtHlaeInputHoldKeyCommand );
 	RegisterGuiCommand( &g_ArtDemoPauseAfterRecordingCommand );
+	RegisterGuiCommand( &g_ArtDemoUnpauseOnRecordingCommand );
 	RegisterGuiCommand( &g_ArtChamsCommand );
 	RegisterGuiCommand( &g_ArtPlayersThroughWallsCommand );
 	RegisterGuiCommand( &g_ArtPlayersWorldWeaponsCommand );

@@ -13,6 +13,12 @@ art_stats
 art_record path <folder|default>
 art_open_folder
 art_prefix <prefix|default>
+art_output_mode <tga|ffmpeg>
+art_ffmpeg_path <path|default>
+art_ffmpeg_preset <prores_422|prores_4444|h264_hq|h264_lossless|nvenc_h264|nvenc_hevc|custom>
+art_ffmpeg_custom <arguments_template>
+art_ffmpeg_test
+art_ffmpeg_status
 art_take_json <on|off|status|write>
 art_debug <on|off>
 ```
@@ -92,6 +98,7 @@ art_gui_experimental <on|off>
 art_overlay <on|off>
 art_config save|load|delete|list [name]
 art_demo_pause_after_recording <on|off>
+art_demo_unpause_on_recording <on|off>
 ```
 
 Default GUI shortcut: `Shift+F3`. Configs are stored in `cstrike/cfg/art_gui`.

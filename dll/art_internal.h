@@ -160,6 +160,7 @@ namespace art
 	bool SetRecordBasePath( const char *pRequestedPath, char *pError, size_t errorBytes );
 	bool MakeTakeDirectories( const char *pRequestedName );
 	bool CaptureTga( const CViewSetup &view, const char *pPassName );
+	bool CaptureFfmpeg( const CViewSetup &view, const char *pPassName );
 
 	static const int ART_CAPTURE_PASS_COUNT = 7;
 	static const int ART_QUEUE_DEFAULT_MAX_FILES = 16;

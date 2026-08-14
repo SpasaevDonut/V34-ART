@@ -1,6 +1,9 @@
 // Shared recorder state, take paths, and hook lifetime management.
 
 #include "art_internal.h"
+#include "art_ffmpeg.h"
+#include "art_hlae.h"
+#include "art_gui.h"
 
 // memdbgon must be the last include file in a .cpp file.
 #include "tier0/memdbgon.h"
@@ -401,8 +404,97 @@ bool ShouldLogPassConVars()
 		return true;
 	}
 
+	bool CaptureFfmpeg( const CViewSetup &view, const char *pPassName )
+	{
+		LogMessage( "CAPTURE FFMPEG BEGIN: frame=%d pass='%s' viewport=(%d,%d %dx%d)",
+			g_nFrame, pPassName, view.x, view.y, view.width, view.height );
+		if ( view.width <= 0 || view.height <= 0 )
+		{
+			LogMessage( "CAPTURE FAILED: frame=%d pass='%s' invalid viewport dimensions", g_nFrame, pPassName );
+			return false;
+		}
+
+		if ( !AreArtFfmpegPipesActive() )
+		{
+			ConVar *pHostFramerate = g_pCvar ? g_pCvar->FindVar( "host_framerate" ) : NULL;
+			const float fps = pHostFramerate && pHostFramerate->GetFloat() > 0.0f ? pHostFramerate->GetFloat() : 60.0f;
+			const LONG recordMask = InterlockedCompareExchange( &g_nRecordMask, 0, 0 );
+			if ( !StartArtFfmpegPipes( view.width, view.height, fps, g_szTakeRoot, recordMask ) )
+			{
+				LogMessage( "CAPTURE FFMPEG FAILED: StartArtFfmpegPipes returned false" );
+				ArtConsoleMessage( "art: unable to start FFmpeg video pipeline. Check FFmpeg executable path and preset.\n" );
+				return false;
+			}
+		}
+
+		const unsigned __int64 pixelCount64 =
+			static_cast<unsigned __int64>( view.width ) * static_cast<unsigned __int64>( view.height );
+		if ( pixelCount64 > ( static_cast<size_t>( -1 ) - 2048 ) / 4 )
+		{
+			LogMessage( "CAPTURE FAILED: frame=%d pass='%s' viewport byte size overflow", g_nFrame, pPassName );
+			ArtConsoleMessage( "art: capture dimensions are too large. Recording stopped.\n" );
+			return false;
+		}
+		const size_t pixelBytes = static_cast<size_t>( pixelCount64 ) * 3;
+
+		unsigned char *pPixels = static_cast<unsigned char *>(
+			AllocateArtCaptureMemory( pixelBytes, "FFmpeg frame readback" ) );
+		if ( !pPixels )
+		{
+			LogMessage( "CAPTURE FAILED: frame=%d pass='%s' pixel allocation returned null", g_nFrame, pPassName );
+			ArtConsoleMessage( "art: unable to allocate frame readback buffer for FFmpeg. Recording stopped.\n" );
+			return false;
+		}
+
+		LogMessage( "READPIXELS BEGIN: frame=%d pass='%s' buffer=%p format=IMAGE_FORMAT_RGB888", g_nFrame, pPassName, pPixels );
+		const unsigned __int64 readTiming = BeginArtStageTiming();
+		g_pMaterials->ReadPixels( view.x, view.y, view.width, view.height, pPixels, IMAGE_FORMAT_RGB888 );
+		EndArtStageTiming( ART_TIMING_READ, readTiming );
+		LogMessage( "READPIXELS COMPLETE: frame=%d pass='%s'", g_nFrame, pPassName );
+
+		if ( !Q_stricmp( pPassName, "depth" ) )
+		{
+			const DWORD cleanupBegin = GetTickCount();
+			for ( size_t i = 0; i < pixelBytes; i += 3 )
+			{
+				unsigned char depth = pPixels[i];
+				if ( pPixels[i + 1] < depth )
+					depth = pPixels[i + 1];
+				if ( pPixels[i + 2] < depth )
+					depth = pPixels[i + 2];
+				pPixels[i] = depth;
+				pPixels[i + 1] = depth;
+				pPixels[i + 2] = depth;
+			}
+			LogMessage( "DEPTH PIXEL CLEANUP COMPLETE: frame=%d pixels=%Iu elapsed_ms=%lu method=min_rgb_grayscale",
+				g_nFrame, pixelBytes / 3, GetTickCount() - cleanupBegin );
+		}
+
+		const unsigned __int64 writeTiming = BeginArtStageTiming();
+		const bool streamed = WriteArtFfmpegFrame( pPassName, pPixels, view.width, view.height );
+		EndArtStageTiming( ART_TIMING_WRITE, writeTiming );
+
+		free( pPixels );
+
+		if ( !streamed )
+		{
+			LogMessage( "CAPTURE FFMPEG FAILED: frame=%d pass='%s' WriteArtFfmpegFrame returned false", g_nFrame, pPassName );
+			ArtConsoleMessage( "art: failed to stream frame %d to FFmpeg for pass '%s'. Recording stopped.\n", g_nFrame, pPassName );
+			return false;
+		}
+
+		RecordArtCapturedFile( pPassName, g_nFrame, static_cast<unsigned long>( pixelBytes ), view.width, view.height,
+			view.fov, view.fovViewmodel );
+		LogMessage( "CAPTURE FFMPEG COMPLETE: frame=%d pass='%s'", g_nFrame, pPassName );
+		return true;
+	}
+
 	bool CaptureTga( const CViewSetup &view, const char *pPassName )
 	{
+		const LONG outputMode = InterlockedCompareExchange( &g_nArtOutputMode, 0, 0 );
+		if ( outputMode == ART_OUTPUT_MODE_FFMPEG )
+			return CaptureFfmpeg( view, pPassName );
+
 		LogMessage( "CAPTURE BEGIN: frame=%d pass='%s' viewport=(%d,%d %dx%d)",
 			g_nFrame, pPassName, view.x, view.y, view.width, view.height );
 		if ( view.width <= 0 || view.height <= 0 )

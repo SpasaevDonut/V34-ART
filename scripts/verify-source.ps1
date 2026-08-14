@@ -17,6 +17,8 @@ $requiredFiles = @(
 	"v34-art.sln",
 	"dll\v34_art.cpp",
 	"dll\art_commands.cpp",
+	"dll\art_ffmpeg.cpp",
+	"dll\art_ffmpeg.h",
 	"dll\art_internal.h",
 	"dll\art_logging.cpp",
 	"dll\art_logic.cpp",

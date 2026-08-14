@@ -21,6 +21,9 @@
     <ClCompile Include="art_commands.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="art_ffmpeg.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="art_gui.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -92,6 +95,9 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="art_ffmpeg.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="art_gui.h">
       <Filter>Header Files</Filter>
     </ClInclude>

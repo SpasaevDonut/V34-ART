@@ -28,6 +28,7 @@ namespace art
 	bool IsArtGlobalFovOverrideActive();
 	bool ApplyArtGlobalFov( CViewSetup &view );
 	bool PauseArtDemoAfterRecordingIfEnabled();
+	bool ResumeArtDemoBeforeRecordingIfEnabled();
 
 	// Applies no-flash and no-smoke state immediately before Source renders a view.
 	// No-flash clears replicated player flash values; no-smoke suppresses only smoke
