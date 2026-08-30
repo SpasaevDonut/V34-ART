@@ -58,6 +58,7 @@
   <ItemGroup>
     <ClCompile Include="v34_art.cpp" />
     <ClCompile Include="art_commands.cpp" />
+    <ClCompile Include="art_d3d9_depth.cpp" />
     <ClCompile Include="art_ffmpeg.cpp" />
     <ClCompile Include="art_gui.cpp" />
     <ClCompile Include="art_hlae.cpp" />
@@ -84,6 +85,7 @@
     <ClCompile Include="..\third_party\minhook\src\hde\hde32.c" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="art_d3d9_depth.h" />
     <ClInclude Include="art_ffmpeg.h" />
     <ClInclude Include="art_gui.h" />
     <ClInclude Include="art_hlae.h" />

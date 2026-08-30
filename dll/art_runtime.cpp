@@ -4,6 +4,7 @@
 #include "art_ffmpeg.h"
 #include "art_hlae.h"
 #include "art_gui.h"
+#include "art_d3d9_depth.h"
 
 // memdbgon must be the last include file in a .cpp file.
 #include "tier0/memdbgon.h"
@@ -48,6 +49,8 @@ namespace art
 		"Distance where the depth pass begins fading from black to white." );
 	ConVar art_depth_end( "art_depth_end", "800", FCVAR_ARCHIVE,
 		"Distance where the depth pass reaches white." );
+	ConVar art_depth_mode( "art_depth_mode", "fog", FCVAR_ARCHIVE,
+		"Depth pass extraction method: 'fog' (Source Engine classic fog) or 'd3d9' / 'precise' (Direct3D 9 hardware Z-buffer)." );
 
 	const char *PreviewName( LONG preview )
 {

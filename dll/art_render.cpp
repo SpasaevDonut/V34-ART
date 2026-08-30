@@ -4,6 +4,7 @@
 #include "art_internal.h"
 #include "art_hlae.h"
 #include "art_ffmpeg.h"
+#include "art_d3d9_depth.h"
 
 // memdbgon must be the last include file in a .cpp file.
 #include "tier0/memdbgon.h"
@@ -574,21 +575,33 @@ class HidePlayersRenderScope
 
 			if ( ok && ( recordMask & ART_RECORD_DEPTH ) )
 			{
-				LogMessage( "PASS BEGIN: frame=%d pass='depth' clear_flags=0x%X hud=%d fog_start=%g fog_end=%g",
-					g_nFrame, clearFlags, ( hudMask & ART_RECORD_DEPTH ) ? 1 : 0,
-					art_depth_start.GetFloat(), art_depth_end.GetFloat() );
-				CConVarRestore vars;
-				ApplyDepth( vars );
-				ApplyHudSetting( vars, hudMask, ART_RECORD_DEPTH );
-				g_pMaterials->ClearColor4ub( 255, 255, 255, 255 );
+				const LONG depthMode = InterlockedCompareExchange( &g_nArtDepthMode, 0, 0 );
+				if ( depthMode == ART_DEPTH_MODE_D3D9 && IsD3D9DepthCaptureReady() )
 				{
+					LogMessage( "PASS BEGIN: frame=%d pass='depth' mode=d3d9_precise depth_start=%g depth_end=%g",
+						g_nFrame, art_depth_start.GetFloat(), art_depth_end.GetFloat() );
 					ArtScopedStageTiming renderTiming( ART_TIMING_RENDER );
-					g_pClient->RenderViewEx( utilityView, clearFlags,
-						AddHudDrawFlag( 0, hudMask, ART_RECORD_DEPTH ) );
+					ok = CapturePreciseDepthPass( view, "depth" );
+					LogMessage( "PASS END: frame=%d pass='depth' mode=d3d9_precise success=%d", g_nFrame, ok ? 1 : 0 );
 				}
-				LogMessage( "PASS RENDER COMPLETE: frame=%d pass='depth'", g_nFrame );
-				ok = CaptureTga( view, "depth" );
-				LogMessage( "PASS END: frame=%d pass='depth' success=%d", g_nFrame, ok ? 1 : 0 );
+				else
+				{
+					LogMessage( "PASS BEGIN: frame=%d pass='depth' mode=fog clear_flags=0x%X hud=%d fog_start=%g fog_end=%g",
+						g_nFrame, clearFlags, ( hudMask & ART_RECORD_DEPTH ) ? 1 : 0,
+						art_depth_start.GetFloat(), art_depth_end.GetFloat() );
+					CConVarRestore vars;
+					ApplyDepth( vars );
+					ApplyHudSetting( vars, hudMask, ART_RECORD_DEPTH );
+					g_pMaterials->ClearColor4ub( 255, 255, 255, 255 );
+					{
+						ArtScopedStageTiming renderTiming( ART_TIMING_RENDER );
+						g_pClient->RenderViewEx( utilityView, clearFlags,
+							AddHudDrawFlag( 0, hudMask, ART_RECORD_DEPTH ) );
+					}
+					LogMessage( "PASS RENDER COMPLETE: frame=%d pass='depth'", g_nFrame );
+					ok = CaptureTga( view, "depth" );
+					LogMessage( "PASS END: frame=%d pass='depth' mode=fog success=%d", g_nFrame, ok ? 1 : 0 );
+				}
 			}
 			else if ( ok )
 			{

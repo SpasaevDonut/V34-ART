@@ -21,6 +21,9 @@
     <ClCompile Include="art_commands.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="art_d3d9_depth.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="art_ffmpeg.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -95,6 +98,9 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="art_d3d9_depth.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="art_ffmpeg.h">
       <Filter>Header Files</Filter>
     </ClInclude>

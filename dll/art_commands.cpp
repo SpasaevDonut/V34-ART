@@ -4,6 +4,7 @@
 #include "art_gui.h"
 #include "art_hlae.h"
 #include "art_ffmpeg.h"
+#include "art_d3d9_depth.h"
 
 // memdbgon must be the last include file in a .cpp file.
 #include "tier0/memdbgon.h"
@@ -201,16 +202,16 @@ namespace art
 				art_depth_start.GetFloat(), art_depth_end.GetFloat() );
 			if ( InterlockedCompareExchange( &g_bRecording, FALSE, FALSE ) )
 			{
-				ArtConsoleMessage( "art: recording frame %d to %s; preview %s; Viewmodel RGB %d %d %d; Players RGB %d %d %d; viewmodel FOV %g; fog depth start %g end %g.\n",
-					g_nFrame, displayPath, PreviewName( preview ),
+				ArtConsoleMessage( "art: recording frame %d to %s; preview %s; depth mode %s; Viewmodel RGB %d %d %d; Players RGB %d %d %d; viewmodel FOV %g; depth start %g end %g.\n",
+					g_nFrame, displayPath, PreviewName( preview ), GetArtDepthModeName( InterlockedCompareExchange( &g_nArtDepthMode, 0, 0 ) ),
 					g_nViewmodelBackgroundRed, g_nViewmodelBackgroundGreen, g_nViewmodelBackgroundBlue,
 					g_nPlayersBackgroundRed, g_nPlayersBackgroundGreen, g_nPlayersBackgroundBlue,
 					g_flViewmodelFov, art_depth_start.GetFloat(), art_depth_end.GetFloat() );
 			}
 			else
 			{
-				ArtConsoleMessage( "art: idle; preview %s; standalone hook is loaded; Viewmodel RGB %d %d %d; Players RGB %d %d %d; viewmodel FOV %g; fog depth start %g end %g.\n",
-					PreviewName( preview ),
+				ArtConsoleMessage( "art: idle; preview %s; depth mode %s; standalone hook is loaded; Viewmodel RGB %d %d %d; Players RGB %d %d %d; viewmodel FOV %g; depth start %g end %g.\n",
+					PreviewName( preview ), GetArtDepthModeName( InterlockedCompareExchange( &g_nArtDepthMode, 0, 0 ) ),
 					g_nViewmodelBackgroundRed, g_nViewmodelBackgroundGreen, g_nViewmodelBackgroundBlue,
 					g_nPlayersBackgroundRed, g_nPlayersBackgroundGreen, g_nPlayersBackgroundBlue,
 					g_flViewmodelFov, art_depth_start.GetFloat(), art_depth_end.GetFloat() );
@@ -1062,6 +1063,33 @@ namespace art
 			ArtConsoleMessage( "  Active pipe status:    %s\n", AreArtFfmpegPipesActive() ? "ACTIVE" : "IDLE" );
 		}
 
+		void ArtDepthMode_f()
+		{
+			const int argc = g_pEngine ? g_pEngine->Cmd_Argc() : 0;
+			const LONG currentMode = InterlockedCompareExchange( &g_nArtDepthMode, 0, 0 );
+			if ( argc == 1 )
+			{
+				ArtConsoleMessage( "art_depth_mode is '%s' (hardware D3D9 INTZ supported: %s, capture ready: %s).\n",
+					GetArtDepthModeName( currentMode ),
+					IsD3D9IntzSupported() ? "yes" : "no",
+					IsD3D9DepthCaptureReady() ? "yes" : "no" );
+				ArtConsoleMessage( "Usage: art_depth_mode <fog|d3d9|precise>.\n" );
+				return;
+			}
+			if ( argc != 2 )
+			{
+				ArtConsoleMessage( "Usage: art_depth_mode <fog|d3d9|precise>.\n" );
+				return;
+			}
+			const char *pMode = g_pEngine->Cmd_Argv( 1 );
+			const LONG newMode = ArtDepthModeFromName( pMode );
+			InterlockedExchange( &g_nArtDepthMode, newMode );
+			LogMessage( "DEPTH MODE CHANGED: mode='%s'", GetArtDepthModeName( newMode ) );
+			ArtConsoleMessage( "art_depth_mode: mode set to '%s'%s.\n",
+				GetArtDepthModeName( newMode ),
+				( newMode == ART_DEPTH_MODE_D3D9 && !IsD3D9IntzSupported() ) ? " (warning: INTZ not supported by GPU)" : "" );
+		}
+
 		ConCommand art_start( "art_start", ArtStart_f,
 			"Start synchronized multi-pass TGA recording. Usage: art_start [take_name]" );
 		ConCommand art_stop( "art_stop", ArtStop_f,
@@ -1108,6 +1136,8 @@ namespace art
 			"Toggle a live pass preview. Usage: art_preview <normal|clear|clear-noplayers|viewmodel|depth|players|objectid|off>." );
 		ConCommand art_preview_next( "art_preview_next", ArtPreviewNext_f,
 			"Advance live preview to the next recording pass." );
+		ConCommand art_depth_mode( "art_depth_mode", ArtDepthMode_f,
+			"Set depth pass extraction method: 'fog' or 'd3d9' / 'precise'. Usage: art_depth_mode <fog|d3d9|precise>." );
 		ConCommand art_help( "art_help", ArtHelp_f,
 			"Print the v34_art command reference." );
 		ConCommand art_debug( "art_debug", ArtDebug_f,
@@ -1136,6 +1166,7 @@ namespace art
 				!Q_stricmp( pName, "art_ffmpeg_test" ) || !Q_stricmp( pName, "art_ffmpeg_status" ) ||
 				!Q_stricmp( pName, "art_demo_unpause_on_recording" ) ||
 				!Q_stricmp( pName, "art_prefix" ) || !Q_stricmp( pName, "art_viewmodel_fov" ) ||
+				!Q_stricmp( pName, "art_depth_mode" ) ||
 				!Q_stricmp( pName, "art_help" ) || !Q_stricmp( pName, "art_debug" ) ) )
 			{
 				LogMessage( "COMMAND CONFLICT: found existing '%s' at %p after scanning %d entries", pName, pCommand, count );

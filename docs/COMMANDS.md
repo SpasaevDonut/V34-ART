@@ -44,10 +44,12 @@ art_players_color <r> <g> <b>
 art_players_through_walls <on|off>
 art_players_world_weapons <on|off>
 art_objectid_color <viewmodel|players|world|skybox> <r> <g> <b>
+art_depth_mode <fog|d3d9|precise>  // default fog; d3d9/precise captures hardware Z-buffer via INTZ
 art_depth_start <distance>    // default 150
 art_depth_end <distance>      // default 800
 ```
 
+`art_depth_mode` toggles between Source Engine classic white fog depth ramp (`fog`) and hardware Direct3D 9 Z-buffer capture (`d3d9` / `precise` using INTZ FourCC substitution). In-game GUI menu (`Shift+F3`) includes a direct dropdown switcher on the Passes page with hardware capability indicator.
 ObjectID defaults: viewmodel `255 128 0`, players `0 0 255`, world `255 255 0`, skybox `255 0 0`.
 
 ## FOV and visuals

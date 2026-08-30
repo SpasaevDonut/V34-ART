@@ -4,6 +4,7 @@
 #include "art_gui.h"
 #include "art_logic.h"
 #include "art_ffmpeg.h"
+#include "art_d3d9_depth.h"
 
 #include <algorithm>
 #include <new>
@@ -775,6 +776,7 @@ namespace art
 			"    \"bytes\": %I64u,\n"
 			"    \"record_mask\": %ld,\n"
 			"    \"hud_mask\": %ld,\n"
+			"    \"depth_mode\": \"%s\",\n"
 			"    \"depth_start\": %.6f,\n"
 			"    \"depth_end\": %.6f\n"
 			"  },\n",
@@ -786,6 +788,7 @@ namespace art
 			g_ArtRecordingStats.takeFrames, g_ArtRecordingStats.takeFiles,
 			g_ArtRecordingStats.takeBytes, g_ArtRecordingStats.takeRecordMask,
 			g_ArtRecordingStats.takeHudMask,
+			GetArtDepthModeName( InterlockedCompareExchange( &g_nArtDepthMode, 0, 0 ) ),
 			g_ArtRecordingStats.takeDepthStart, g_ArtRecordingStats.takeDepthEnd );
 		AppendJsonFormat( json,
 			"  \"camera\": {\n"
