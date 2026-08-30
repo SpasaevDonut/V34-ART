@@ -33,11 +33,10 @@ namespace art
 	LONG ArtDepthModeFromName( const char *pName );
 
 	// Subsystem initialization and capabilities
-	bool InitializeD3D9Depth( IDirect3D9 *pD3D, IDirect3DDevice9 *pDevice );
+	bool InitializeD3D9Depth( IDirect3D9 *pD3D );
 	void ShutdownD3D9Depth();
 	bool IsD3D9IntzSupported();
 	bool IsD3D9DepthCaptureReady();
-	uint32_t GetD3D9DepthLastCapturedVertices();
 
 	// Direct3D 9 hook handlers
 	HRESULT HandleD3D9CreateDepthStencilSurface(
@@ -53,12 +52,11 @@ namespace art
 		HRESULT ( WINAPI *pOriginalCreate )( IDirect3DDevice9 *, UINT, UINT, D3DFORMAT, D3DMULTISAMPLE_TYPE, DWORD, BOOL, IDirect3DSurface9 **, HANDLE * )
 	);
 
-	void HandleD3D9SetDepthStencilSurface( IDirect3DSurface9 *pNewSurface );
-	void HandleD3D9SetViewport( const D3DVIEWPORT9 *pViewport );
-	void HandleD3D9Draw( D3DPRIMITIVETYPE type, UINT primitiveCount );
-	void HandleD3D9Clear( IDirect3DDevice9 *pDevice, DWORD flags );
 	void HandleD3D9Present( IDirect3DDevice9 *pDevice, uint32_t backbufferWidth, uint32_t backbufferHeight );
 	void HandleD3D9Reset();
+
+	// Ensures active depth-stencil is an INTZ texture surface
+	bool EnsureActiveDepthSurfaceIsIntz( IDirect3DDevice9 *pDevice );
 
 	// Depth pixel readback & linearization
 	bool ReadPreciseDepthPixels(

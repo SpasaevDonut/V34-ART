@@ -5,7 +5,6 @@
 #include "art_gui.h"
 #include <algorithm>
 #include <vector>
-#include <unordered_map>
 #include <cmath>
 
 #pragma comment( lib, "d3d9.lib" )
@@ -42,31 +41,6 @@ namespace art
 
 	namespace
 	{
-		struct DrawStats
-		{
-			uint32_t vertices = 0;
-			uint32_t drawcalls = 0;
-			D3DVIEWPORT9 lastViewport = {};
-
-			bool operator>( const DrawStats &other ) const
-			{
-				return vertices > other.vertices;
-			}
-		};
-
-		struct ClearStats : public DrawStats
-		{
-			bool copiedDuringFrame = false;
-		};
-
-		struct DepthBufferFrameStats
-		{
-			DrawStats total;
-			DrawStats current;
-			std::vector<ClearStats> clears;
-			bool copiedDuringFrame = false;
-		};
-
 		class D3D9DepthCopier
 		{
 		public:
@@ -340,161 +314,12 @@ namespace art
 			uint32_t _backupHeight;
 		};
 
-		class DepthTracker
-		{
-		public:
-			DepthTracker() :
-				_currentDepthSurface( nullptr ),
-				_currentViewport(),
-				_frameWidth( 0 ),
-				_frameHeight( 0 ),
-				_selectedDepthSurface( nullptr ),
-				_lastCapturedVertices( 0 )
-			{
-			}
-
-			void OnPresent( uint32_t backbufferWidth, uint32_t backbufferHeight )
-			{
-				_frameWidth = backbufferWidth;
-				_frameHeight = backbufferHeight;
-
-				IDirect3DSurface9 *bestSurface = nullptr;
-				uint32_t maxVertices = 0;
-
-				for ( const auto &pair : _statsPerDepthSurface )
-				{
-					IDirect3DSurface9 *surface = pair.first;
-					const DepthBufferFrameStats &stats = pair.second;
-					if ( stats.total.drawcalls == 0 || stats.total.vertices < 3 )
-						continue;
-
-					D3DSURFACE_DESC desc = {};
-					if ( SUCCEEDED( surface->GetDesc( &desc ) ) )
-					{
-						if ( stats.total.vertices > maxVertices )
-						{
-							maxVertices = stats.total.vertices;
-							bestSurface = surface;
-						}
-					}
-				}
-
-				_selectedDepthSurface = bestSurface;
-				_bestCopyStats = { 0, 0, {} };
-				_statsPerDepthSurface.clear();
-			}
-
-			void OnSetDepthStencilSurface( IDirect3DSurface9 *newDepthSurface )
-			{
-				_currentDepthSurface = newDepthSurface;
-			}
-
-			void OnSetViewport( const D3DVIEWPORT9 &viewport )
-			{
-				_currentViewport = viewport;
-			}
-
-			void OnDraw( uint32_t vertexCount )
-			{
-				if ( !_currentDepthSurface )
-					return;
-
-				auto &stats = _statsPerDepthSurface[_currentDepthSurface];
-				stats.total.vertices += vertexCount;
-				stats.total.drawcalls += 1;
-				stats.current.vertices += vertexCount;
-				stats.current.drawcalls += 1;
-				stats.current.lastViewport = _currentViewport;
-			}
-
-			void OnClear( IDirect3DDevice9 *device, DWORD flags, D3D9DepthCopier &copier )
-			{
-				if ( ( flags & D3DCLEAR_ZBUFFER ) == 0 || !_currentDepthSurface )
-					return;
-
-				auto &stats = _statsPerDepthSurface[_currentDepthSurface];
-				if ( stats.current.drawcalls == 0 )
-					return;
-
-				const DrawStats currentStats = stats.current;
-				stats.current = { 0, 0, {} };
-
-				const bool isMeaningfulViewport = ( currentStats.lastViewport.Width > 512 ) ||
-					( currentStats.lastViewport.Width == 0 ) ||
-					( _frameWidth <= 512 );
-
-				if ( !isMeaningfulViewport )
-					return;
-
-				const bool doBackup = ( currentStats.vertices >= _bestCopyStats.vertices ) ||
-					( currentStats.vertices >= 5000 );
-
-				if ( doBackup )
-				{
-					_bestCopyStats = currentStats;
-					_lastCapturedVertices = currentStats.vertices;
-					stats.copiedDuringFrame = true;
-
-					uint32_t copyWidth = currentStats.lastViewport.Width ? currentStats.lastViewport.Width : _frameWidth;
-					uint32_t copyHeight = currentStats.lastViewport.Height ? currentStats.lastViewport.Height : _frameHeight;
-					if ( copyWidth == 0 || copyHeight == 0 )
-					{
-						D3DSURFACE_DESC desc = {};
-						if ( SUCCEEDED( _currentDepthSurface->GetDesc( &desc ) ) )
-						{
-							copyWidth = desc.Width;
-							copyHeight = desc.Height;
-						}
-					}
-
-					if ( copyWidth > 0 && copyHeight > 0 )
-					{
-						copier.CopyDepthBuffer( device, _currentDepthSurface, copyWidth, copyHeight );
-					}
-				}
-
-				ClearStats clearEntry;
-				clearEntry.vertices = currentStats.vertices;
-				clearEntry.drawcalls = currentStats.drawcalls;
-				clearEntry.lastViewport = currentStats.lastViewport;
-				clearEntry.copiedDuringFrame = doBackup;
-				stats.clears.push_back( clearEntry );
-			}
-
-			uint32_t GetLastCapturedVertices() const { return _lastCapturedVertices; }
-
-			static uint32_t CalcVertexCount( D3DPRIMITIVETYPE type, UINT primitiveCount )
-			{
-				switch ( type )
-				{
-				case D3DPT_POINTLIST:     return primitiveCount;
-				case D3DPT_LINELIST:      return primitiveCount * 2;
-				case D3DPT_LINESTRIP:     return primitiveCount + 1;
-				case D3DPT_TRIANGLELIST:  return primitiveCount * 3;
-				case D3DPT_TRIANGLESTRIP: return primitiveCount + 2;
-				case D3DPT_TRIANGLEFAN:   return primitiveCount + 2;
-				default:                  return 0;
-				}
-			}
-
-		private:
-			IDirect3DSurface9 *_currentDepthSurface;
-			D3DVIEWPORT9 _currentViewport;
-			uint32_t _frameWidth;
-			uint32_t _frameHeight;
-			DrawStats _bestCopyStats;
-			std::unordered_map<IDirect3DSurface9 *, DepthBufferFrameStats> _statsPerDepthSurface;
-			IDirect3DSurface9 *_selectedDepthSurface;
-			uint32_t _lastCapturedVertices;
-		};
-
 		bool g_bIntzSupported = false;
 		bool g_bIntzChecked = false;
 		D3D9DepthCopier g_DepthCopier;
-		DepthTracker g_DepthTracker;
 	}
 
-	bool InitializeD3D9Depth( IDirect3D9 *pD3D, IDirect3DDevice9 *pDevice )
+	bool InitializeD3D9Depth( IDirect3D9 *pD3D )
 	{
 		if ( !pD3D )
 			return false;
@@ -514,11 +339,6 @@ namespace art
 			LogMessage( "D3D9 DEPTH: INTZ support check result=0x%08lX supported=%d", hr, g_bIntzSupported ? 1 : 0 );
 		}
 
-		if ( pDevice )
-		{
-			g_DepthCopier.InitCopyStateBlock( pDevice );
-		}
-
 		return g_bIntzSupported;
 	}
 
@@ -534,12 +354,59 @@ namespace art
 
 	bool IsD3D9DepthCaptureReady()
 	{
-		return g_bIntzSupported && g_DepthCopier.GetBackupSurface() != nullptr;
+		return g_bIntzSupported;
 	}
 
-	uint32_t GetD3D9DepthLastCapturedVertices()
+	bool EnsureActiveDepthSurfaceIsIntz( IDirect3DDevice9 *pDevice )
 	{
-		return g_DepthTracker.GetLastCapturedVertices();
+		if ( !pDevice || !g_bIntzSupported )
+			return false;
+
+		IDirect3DSurface9 *pCurrentSurface = nullptr;
+		HRESULT hr = pDevice->GetDepthStencilSurface( &pCurrentSurface );
+		if ( FAILED( hr ) || !pCurrentSurface )
+			return false;
+
+		D3DSURFACE_DESC desc = {};
+		pCurrentSurface->GetDesc( &desc );
+
+		if ( desc.Format == D3DFMT_INTZ )
+		{
+			pCurrentSurface->Release();
+			return true;
+		}
+
+		pCurrentSurface->Release();
+
+		if ( desc.MultiSampleType != D3DMULTISAMPLE_NONE )
+			return false;
+
+		IDirect3DTexture9 *pIntzTexture = nullptr;
+		hr = pDevice->CreateTexture(
+			desc.Width,
+			desc.Height,
+			1,
+			D3DUSAGE_DEPTHSTENCIL,
+			D3DFMT_INTZ,
+			D3DPOOL_DEFAULT,
+			&pIntzTexture,
+			nullptr
+		);
+
+		if ( FAILED( hr ) || !pIntzTexture )
+			return false;
+
+		IDirect3DSurface9 *pIntzSurface = nullptr;
+		hr = pIntzTexture->GetSurfaceLevel( 0, &pIntzSurface );
+		if ( SUCCEEDED( hr ) && pIntzSurface )
+		{
+			pDevice->SetDepthStencilSurface( pIntzSurface );
+			LogMessage( "D3D9 DEPTH: activated INTZ depth buffer %ux%u", desc.Width, desc.Height );
+			pIntzSurface->Release();
+		}
+		pIntzTexture->Release();
+
+		return SUCCEEDED( hr );
 	}
 
 	HRESULT HandleD3D9CreateDepthStencilSurface(
@@ -594,32 +461,11 @@ namespace art
 		return pDevice->CreateDepthStencilSurface( Width, Height, Format, MultiSample, MultisampleQuality, Discard, ppSurface, pSharedHandle );
 	}
 
-	void HandleD3D9SetDepthStencilSurface( IDirect3DSurface9 *pNewSurface )
-	{
-		g_DepthTracker.OnSetDepthStencilSurface( pNewSurface );
-	}
-
-	void HandleD3D9SetViewport( const D3DVIEWPORT9 *pViewport )
-	{
-		if ( pViewport )
-			g_DepthTracker.OnSetViewport( *pViewport );
-	}
-
-	void HandleD3D9Draw( D3DPRIMITIVETYPE type, UINT primitiveCount )
-	{
-		g_DepthTracker.OnDraw( DepthTracker::CalcVertexCount( type, primitiveCount ) );
-	}
-
-	void HandleD3D9Clear( IDirect3DDevice9 *pDevice, DWORD flags )
-	{
-		if ( pDevice )
-			g_DepthTracker.OnClear( pDevice, flags, g_DepthCopier );
-	}
-
 	void HandleD3D9Present( IDirect3DDevice9 *pDevice, uint32_t backbufferWidth, uint32_t backbufferHeight )
 	{
 		( void )pDevice;
-		g_DepthTracker.OnPresent( backbufferWidth, backbufferHeight );
+		( void )backbufferWidth;
+		( void )backbufferHeight;
 	}
 
 	void HandleD3D9Reset()
@@ -723,6 +569,21 @@ namespace art
 		IDirect3DDevice9 *pDevice = GetArtGuiDevice();
 		if ( !pDevice )
 			return false;
+
+		EnsureActiveDepthSurfaceIsIntz( pDevice );
+
+		IDirect3DSurface9 *pActiveDepth = nullptr;
+		HRESULT hr = pDevice->GetDepthStencilSurface( &pActiveDepth );
+		if ( FAILED( hr ) || !pActiveDepth )
+			return false;
+
+		hr = g_DepthCopier.CopyDepthBuffer( pDevice, pActiveDepth, view.width, view.height );
+		pActiveDepth->Release();
+		if ( FAILED( hr ) )
+		{
+			LogMessage( "PRECISE DEPTH: CopyDepthBuffer failed hr=0x%08lX", hr );
+			return false;
+		}
 
 		const size_t pixelCount = static_cast<size_t>( view.width ) * static_cast<size_t>( view.height );
 		const size_t pixelBytes = pixelCount * 3;

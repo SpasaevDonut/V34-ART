@@ -90,13 +90,6 @@ namespace
 	static const int kD3D9EndSceneIndex = 42;
 	static const int kD3D9SwapChainPresentIndex = 3;
 	static const int kD3D9CreateDepthStencilSurfaceIndex = 26;
-	static const int kD3D9SetDepthStencilSurfaceIndex = 37;
-	static const int kD3D9SetViewportIndex = 47;
-	static const int kD3D9ClearIndex = 43;
-	static const int kD3D9DrawPrimitiveIndex = 81;
-	static const int kD3D9DrawIndexedPrimitiveIndex = 82;
-	static const int kD3D9DrawPrimitiveUPIndex = 83;
-	static const int kD3D9DrawIndexedPrimitiveUPIndex = 84;
 	static const int kMaxCommandHistory = 18;
 	static const int kDemoPlayerRefreshMinimumAttempts = 6;
 	static const int kDemoPlayerRefreshMaximumAttempts = 60;
@@ -116,13 +109,6 @@ namespace
 	typedef HRESULT ( WINAPI *SwapChainPresentFn )( IDirect3DSwapChain9 *, const RECT *, const RECT *, HWND,
 		const RGNDATA *, DWORD );
 	typedef HRESULT ( WINAPI *CreateDepthStencilSurfaceFn )( IDirect3DDevice9 *, UINT, UINT, D3DFORMAT, D3DMULTISAMPLE_TYPE, DWORD, BOOL, IDirect3DSurface9 **, HANDLE * );
-	typedef HRESULT ( WINAPI *SetDepthStencilSurfaceFn )( IDirect3DDevice9 *, IDirect3DSurface9 * );
-	typedef HRESULT ( WINAPI *SetViewportFn )( IDirect3DDevice9 *, const D3DVIEWPORT9 * );
-	typedef HRESULT ( WINAPI *ClearFn )( IDirect3DDevice9 *, DWORD, const D3DRECT *, DWORD, D3DCOLOR, float, DWORD );
-	typedef HRESULT ( WINAPI *DrawPrimitiveFn )( IDirect3DDevice9 *, D3DPRIMITIVETYPE, UINT, UINT );
-	typedef HRESULT ( WINAPI *DrawIndexedPrimitiveFn )( IDirect3DDevice9 *, D3DPRIMITIVETYPE, INT, UINT, UINT, UINT, UINT );
-	typedef HRESULT ( WINAPI *DrawPrimitiveUPFn )( IDirect3DDevice9 *, D3DPRIMITIVETYPE, UINT, const void *, UINT );
-	typedef HRESULT ( WINAPI *DrawIndexedPrimitiveUPFn )( IDirect3DDevice9 *, D3DPRIMITIVETYPE, UINT, UINT, UINT, const void *, D3DFORMAT, const void *, UINT );
 	typedef BOOL ( WINAPI *GetCursorPosFn )( POINT * );
 	typedef BOOL ( WINAPI *SetCursorPosFn )( int, int );
 	typedef BOOL ( WINAPI *ClipCursorFn )( const RECT * );
@@ -327,13 +313,6 @@ namespace
 	void *g_pEndSceneTarget = NULL;
 	void *g_pSwapChainPresentTarget = NULL;
 	void *g_pCreateDepthStencilSurfaceTarget = NULL;
-	void *g_pSetDepthStencilSurfaceTarget = NULL;
-	void *g_pSetViewportTarget = NULL;
-	void *g_pClearTarget = NULL;
-	void *g_pDrawPrimitiveTarget = NULL;
-	void *g_pDrawIndexedPrimitiveTarget = NULL;
-	void *g_pDrawPrimitiveUPTarget = NULL;
-	void *g_pDrawIndexedPrimitiveUPTarget = NULL;
 	void *g_pGetCursorPosTarget = NULL;
 	void *g_pSetCursorPosTarget = NULL;
 	void *g_pClipCursorTarget = NULL;
@@ -343,13 +322,6 @@ namespace
 	EndSceneFn g_pOriginalEndScene = NULL;
 	SwapChainPresentFn g_pOriginalSwapChainPresent = NULL;
 	CreateDepthStencilSurfaceFn g_pOriginalCreateDepthStencilSurface = NULL;
-	SetDepthStencilSurfaceFn g_pOriginalSetDepthStencilSurface = NULL;
-	SetViewportFn g_pOriginalSetViewport = NULL;
-	ClearFn g_pOriginalClear = NULL;
-	DrawPrimitiveFn g_pOriginalDrawPrimitive = NULL;
-	DrawIndexedPrimitiveFn g_pOriginalDrawIndexedPrimitive = NULL;
-	DrawPrimitiveUPFn g_pOriginalDrawPrimitiveUP = NULL;
-	DrawIndexedPrimitiveUPFn g_pOriginalDrawIndexedPrimitiveUP = NULL;
 	GetCursorPosFn g_pOriginalGetCursorPos = NULL;
 	SetCursorPosFn g_pOriginalSetCursorPos = NULL;
 	ClipCursorFn g_pOriginalClipCursor = NULL;
@@ -360,13 +332,6 @@ namespace
 	bool g_bEndSceneHookCreated = false;
 	bool g_bSwapChainPresentHookCreated = false;
 	bool g_bCreateDepthStencilSurfaceHookCreated = false;
-	bool g_bSetDepthStencilSurfaceHookCreated = false;
-	bool g_bSetViewportHookCreated = false;
-	bool g_bClearHookCreated = false;
-	bool g_bDrawPrimitiveHookCreated = false;
-	bool g_bDrawIndexedPrimitiveHookCreated = false;
-	bool g_bDrawPrimitiveUPHookCreated = false;
-	bool g_bDrawIndexedPrimitiveUPHookCreated = false;
 	bool g_bGetCursorPosHookCreated = false;
 	bool g_bSetCursorPosHookCreated = false;
 	bool g_bClipCursorHookCreated = false;
@@ -3970,14 +3935,7 @@ namespace
 		{
 			if ( IsD3D9IntzSupported() )
 			{
-				if ( IsD3D9DepthCaptureReady() )
-				{
-					ImGui::TextColored( ImVec4( 0.35f, 0.95f, 0.35f, 1.0f ), "[Hardware D3D9 Ready - Vertices: %u]", GetD3D9DepthLastCapturedVertices() );
-				}
-				else
-				{
-					ImGui::TextColored( ImVec4( 0.95f, 0.85f, 0.35f, 1.0f ), "[Hardware D3D9 Enabled - Waiting for 3D scene pass]" );
-				}
+				ImGui::TextColored( ImVec4( 0.35f, 0.95f, 0.35f, 1.0f ), "[Hardware D3D9 Ready (INTZ Buffer Active)]" );
 			}
 			else
 			{
@@ -6846,60 +6804,6 @@ namespace
 			MultisampleQuality, Discard, ppSurface, pSharedHandle, g_pOriginalCreateDepthStencilSurface );
 	}
 
-	HRESULT WINAPI HookedSetDepthStencilSurface( IDirect3DDevice9 *pDevice, IDirect3DSurface9 *pNewZStencil )
-	{
-		HandleD3D9SetDepthStencilSurface( pNewZStencil );
-		return g_pOriginalSetDepthStencilSurface ?
-			g_pOriginalSetDepthStencilSurface( pDevice, pNewZStencil ) : D3D_OK;
-	}
-
-	HRESULT WINAPI HookedSetViewport( IDirect3DDevice9 *pDevice, const D3DVIEWPORT9 *pViewport )
-	{
-		HandleD3D9SetViewport( pViewport );
-		return g_pOriginalSetViewport ? g_pOriginalSetViewport( pDevice, pViewport ) : D3D_OK;
-	}
-
-	HRESULT WINAPI HookedClear( IDirect3DDevice9 *pDevice, DWORD Count, const D3DRECT *pRects,
-		DWORD Flags, D3DCOLOR Color, float Z, DWORD Stencil )
-	{
-		HandleD3D9Clear( pDevice, Flags );
-		return g_pOriginalClear ?
-			g_pOriginalClear( pDevice, Count, pRects, Flags, Color, Z, Stencil ) : D3D_OK;
-	}
-
-	HRESULT WINAPI HookedDrawPrimitive( IDirect3DDevice9 *pDevice, D3DPRIMITIVETYPE PrimitiveType,
-		UINT StartVertex, UINT PrimitiveCount )
-	{
-		HandleD3D9Draw( PrimitiveType, PrimitiveCount );
-		return g_pOriginalDrawPrimitive ?
-			g_pOriginalDrawPrimitive( pDevice, PrimitiveType, StartVertex, PrimitiveCount ) : D3D_OK;
-	}
-
-	HRESULT WINAPI HookedDrawIndexedPrimitive( IDirect3DDevice9 *pDevice, D3DPRIMITIVETYPE Type,
-		INT BaseVertexIndex, UINT MinVertexIndex, UINT NumVertices, UINT startIndex, UINT primCount )
-	{
-		HandleD3D9Draw( Type, primCount );
-		return g_pOriginalDrawIndexedPrimitive ?
-			g_pOriginalDrawIndexedPrimitive( pDevice, Type, BaseVertexIndex, MinVertexIndex, NumVertices, startIndex, primCount ) : D3D_OK;
-	}
-
-	HRESULT WINAPI HookedDrawPrimitiveUP( IDirect3DDevice9 *pDevice, D3DPRIMITIVETYPE PrimitiveType,
-		UINT PrimitiveCount, const void *pVertexStreamZeroData, UINT VertexStreamZeroStride )
-	{
-		HandleD3D9Draw( PrimitiveType, PrimitiveCount );
-		return g_pOriginalDrawPrimitiveUP ?
-			g_pOriginalDrawPrimitiveUP( pDevice, PrimitiveType, PrimitiveCount, pVertexStreamZeroData, VertexStreamZeroStride ) : D3D_OK;
-	}
-
-	HRESULT WINAPI HookedDrawIndexedPrimitiveUP( IDirect3DDevice9 *pDevice, D3DPRIMITIVETYPE PrimitiveType,
-		UINT MinVertexIndex, UINT NumVertices, UINT PrimitiveCount, const void *pIndexData,
-		D3DFORMAT IndexDataFormat, const void *pVertexStreamZeroData, UINT VertexStreamZeroStride )
-	{
-		HandleD3D9Draw( PrimitiveType, PrimitiveCount );
-		return g_pOriginalDrawIndexedPrimitiveUP ?
-			g_pOriginalDrawIndexedPrimitiveUP( pDevice, PrimitiveType, MinVertexIndex, NumVertices, PrimitiveCount, pIndexData, IndexDataFormat, pVertexStreamZeroData, VertexStreamZeroStride ) : D3D_OK;
-	}
-
 	HRESULT WINAPI HookedReset( IDirect3DDevice9 *pDevice, D3DPRESENT_PARAMETERS *pParameters )
 	{
 		if ( InterlockedCompareExchange( &g_bArtGuiTerminating, FALSE, FALSE ) )
@@ -7496,41 +7400,6 @@ namespace
 			MH_RemoveHook( g_pGetCursorPosTarget );
 		}
 
-		if ( g_bDrawIndexedPrimitiveUPHookCreated )
-		{
-			MH_DisableHook( g_pDrawIndexedPrimitiveUPTarget );
-			MH_RemoveHook( g_pDrawIndexedPrimitiveUPTarget );
-		}
-		if ( g_bDrawPrimitiveUPHookCreated )
-		{
-			MH_DisableHook( g_pDrawPrimitiveUPTarget );
-			MH_RemoveHook( g_pDrawPrimitiveUPTarget );
-		}
-		if ( g_bDrawIndexedPrimitiveHookCreated )
-		{
-			MH_DisableHook( g_pDrawIndexedPrimitiveTarget );
-			MH_RemoveHook( g_pDrawIndexedPrimitiveTarget );
-		}
-		if ( g_bDrawPrimitiveHookCreated )
-		{
-			MH_DisableHook( g_pDrawPrimitiveTarget );
-			MH_RemoveHook( g_pDrawPrimitiveTarget );
-		}
-		if ( g_bClearHookCreated )
-		{
-			MH_DisableHook( g_pClearTarget );
-			MH_RemoveHook( g_pClearTarget );
-		}
-		if ( g_bSetViewportHookCreated )
-		{
-			MH_DisableHook( g_pSetViewportTarget );
-			MH_RemoveHook( g_pSetViewportTarget );
-		}
-		if ( g_bSetDepthStencilSurfaceHookCreated )
-		{
-			MH_DisableHook( g_pSetDepthStencilSurfaceTarget );
-			MH_RemoveHook( g_pSetDepthStencilSurfaceTarget );
-		}
 		if ( g_bCreateDepthStencilSurfaceHookCreated )
 		{
 			MH_DisableHook( g_pCreateDepthStencilSurfaceTarget );
@@ -7566,13 +7435,6 @@ namespace
 		g_bEndSceneHookCreated = false;
 		g_bSwapChainPresentHookCreated = false;
 		g_bCreateDepthStencilSurfaceHookCreated = false;
-		g_bSetDepthStencilSurfaceHookCreated = false;
-		g_bSetViewportHookCreated = false;
-		g_bClearHookCreated = false;
-		g_bDrawPrimitiveHookCreated = false;
-		g_bDrawIndexedPrimitiveHookCreated = false;
-		g_bDrawPrimitiveUPHookCreated = false;
-		g_bDrawIndexedPrimitiveUPHookCreated = false;
 		g_bGetCursorPosHookCreated = false;
 		g_bSetCursorPosHookCreated = false;
 		g_bClipCursorHookCreated = false;
@@ -7582,13 +7444,6 @@ namespace
 		g_pEndSceneTarget = NULL;
 		g_pSwapChainPresentTarget = NULL;
 		g_pCreateDepthStencilSurfaceTarget = NULL;
-		g_pSetDepthStencilSurfaceTarget = NULL;
-		g_pSetViewportTarget = NULL;
-		g_pClearTarget = NULL;
-		g_pDrawPrimitiveTarget = NULL;
-		g_pDrawIndexedPrimitiveTarget = NULL;
-		g_pDrawPrimitiveUPTarget = NULL;
-		g_pDrawIndexedPrimitiveUPTarget = NULL;
 		g_pGetCursorPosTarget = NULL;
 		g_pSetCursorPosTarget = NULL;
 		g_pClipCursorTarget = NULL;
@@ -7598,13 +7453,6 @@ namespace
 		g_pOriginalEndScene = NULL;
 		g_pOriginalSwapChainPresent = NULL;
 		g_pOriginalCreateDepthStencilSurface = NULL;
-		g_pOriginalSetDepthStencilSurface = NULL;
-		g_pOriginalSetViewport = NULL;
-		g_pOriginalClear = NULL;
-		g_pOriginalDrawPrimitive = NULL;
-		g_pOriginalDrawIndexedPrimitive = NULL;
-		g_pOriginalDrawPrimitiveUP = NULL;
-		g_pOriginalDrawIndexedPrimitiveUP = NULL;
 		g_pOriginalGetCursorPos = NULL;
 		g_pOriginalSetCursorPos = NULL;
 		g_pOriginalClipCursor = NULL;
@@ -7678,7 +7526,7 @@ namespace
 			return false;
 		}
 
-		InitializeD3D9Depth( pD3D, pDevice );
+		InitializeD3D9Depth( pD3D );
 
 		void **pDeviceVtable = *reinterpret_cast<void ***>( pDevice );
 		void **pSwapChainVtable = *reinterpret_cast<void ***>( pSwapChain );
@@ -7687,13 +7535,6 @@ namespace
 		g_pEndSceneTarget = pDeviceVtable[kD3D9EndSceneIndex];
 		g_pSwapChainPresentTarget = pSwapChainVtable[kD3D9SwapChainPresentIndex];
 		g_pCreateDepthStencilSurfaceTarget = pDeviceVtable[kD3D9CreateDepthStencilSurfaceIndex];
-		g_pSetDepthStencilSurfaceTarget = pDeviceVtable[kD3D9SetDepthStencilSurfaceIndex];
-		g_pSetViewportTarget = pDeviceVtable[kD3D9SetViewportIndex];
-		g_pClearTarget = pDeviceVtable[kD3D9ClearIndex];
-		g_pDrawPrimitiveTarget = pDeviceVtable[kD3D9DrawPrimitiveIndex];
-		g_pDrawIndexedPrimitiveTarget = pDeviceVtable[kD3D9DrawIndexedPrimitiveIndex];
-		g_pDrawPrimitiveUPTarget = pDeviceVtable[kD3D9DrawPrimitiveUPIndex];
-		g_pDrawIndexedPrimitiveUPTarget = pDeviceVtable[kD3D9DrawIndexedPrimitiveUPIndex];
 
 		HMODULE hUser32 = GetModuleHandleA( "user32.dll" );
 		g_pGetCursorPosTarget = hUser32 ? reinterpret_cast<void *>( GetProcAddress( hUser32, "GetCursorPos" ) ) : NULL;
@@ -7739,27 +7580,6 @@ namespace
 			CreateQueuedHook( g_pCreateDepthStencilSurfaceTarget, reinterpret_cast<void *>( HookedCreateDepthStencilSurface ),
 				reinterpret_cast<void **>( &g_pOriginalCreateDepthStencilSurface ), &g_bCreateDepthStencilSurfaceHookCreated,
 				"CreateDepthStencilSurface" ) &&
-			CreateQueuedHook( g_pSetDepthStencilSurfaceTarget, reinterpret_cast<void *>( HookedSetDepthStencilSurface ),
-				reinterpret_cast<void **>( &g_pOriginalSetDepthStencilSurface ), &g_bSetDepthStencilSurfaceHookCreated,
-				"SetDepthStencilSurface" ) &&
-			CreateQueuedHook( g_pSetViewportTarget, reinterpret_cast<void *>( HookedSetViewport ),
-				reinterpret_cast<void **>( &g_pOriginalSetViewport ), &g_bSetViewportHookCreated,
-				"SetViewport" ) &&
-			CreateQueuedHook( g_pClearTarget, reinterpret_cast<void *>( HookedClear ),
-				reinterpret_cast<void **>( &g_pOriginalClear ), &g_bClearHookCreated,
-				"Clear" ) &&
-			CreateQueuedHook( g_pDrawPrimitiveTarget, reinterpret_cast<void *>( HookedDrawPrimitive ),
-				reinterpret_cast<void **>( &g_pOriginalDrawPrimitive ), &g_bDrawPrimitiveHookCreated,
-				"DrawPrimitive" ) &&
-			CreateQueuedHook( g_pDrawIndexedPrimitiveTarget, reinterpret_cast<void *>( HookedDrawIndexedPrimitive ),
-				reinterpret_cast<void **>( &g_pOriginalDrawIndexedPrimitive ), &g_bDrawIndexedPrimitiveHookCreated,
-				"DrawIndexedPrimitive" ) &&
-			CreateQueuedHook( g_pDrawPrimitiveUPTarget, reinterpret_cast<void *>( HookedDrawPrimitiveUP ),
-				reinterpret_cast<void **>( &g_pOriginalDrawPrimitiveUP ), &g_bDrawPrimitiveUPHookCreated,
-				"DrawPrimitiveUP" ) &&
-			CreateQueuedHook( g_pDrawIndexedPrimitiveUPTarget, reinterpret_cast<void *>( HookedDrawIndexedPrimitiveUP ),
-				reinterpret_cast<void **>( &g_pOriginalDrawIndexedPrimitiveUP ), &g_bDrawIndexedPrimitiveUPHookCreated,
-				"DrawIndexedPrimitiveUP" ) &&
 			CreateQueuedHook( g_pGetCursorPosTarget, reinterpret_cast<void *>( HookedGetCursorPos ),
 				reinterpret_cast<void **>( &g_pOriginalGetCursorPos ), &g_bGetCursorPosHookCreated,
 				"GetCursorPos" ) &&
