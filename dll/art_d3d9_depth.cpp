@@ -50,6 +50,80 @@ namespace art
 			0x0000FFFF                                      // end
 		};
 
+		static bool g_bIntzSupported = false;
+		static bool g_bIntzChecked = false;
+
+		static IDirect3DTexture9 *g_pMainIntzTexture = nullptr;
+		static IDirect3DSurface9 *g_pMainIntzSurface = nullptr;
+		static uint32_t g_nMainIntzWidth = 0;
+		static uint32_t g_nMainIntzHeight = 0;
+
+		IDirect3DSurface9 *GetOrCreateMainIntzSurface( IDirect3DDevice9 *pDevice, UINT width, UINT height )
+		{
+			if ( !pDevice || !g_bIntzSupported || width < 512 || height < 512 )
+				return nullptr;
+
+			if ( g_pMainIntzSurface && g_pMainIntzTexture && g_nMainIntzWidth == width && g_nMainIntzHeight == height )
+			{
+				return g_pMainIntzSurface;
+			}
+
+			if ( g_pMainIntzSurface )
+			{
+				g_pMainIntzSurface->Release();
+				g_pMainIntzSurface = nullptr;
+			}
+			if ( g_pMainIntzTexture )
+			{
+				g_pMainIntzTexture->Release();
+				g_pMainIntzTexture = nullptr;
+			}
+			g_nMainIntzWidth = 0;
+			g_nMainIntzHeight = 0;
+
+			HRESULT hr = pDevice->CreateTexture(
+				width,
+				height,
+				1,
+				D3DUSAGE_DEPTHSTENCIL,
+				D3DFMT_INTZ,
+				D3DPOOL_DEFAULT,
+				&g_pMainIntzTexture,
+				nullptr
+			);
+
+			if ( SUCCEEDED( hr ) && g_pMainIntzTexture )
+			{
+				hr = g_pMainIntzTexture->GetSurfaceLevel( 0, &g_pMainIntzSurface );
+				if ( SUCCEEDED( hr ) && g_pMainIntzSurface )
+				{
+					g_nMainIntzWidth = width;
+					g_nMainIntzHeight = height;
+					LogMessage( "D3D9 DEPTH: Created Main INTZ Depth Texture & Surface %ux%u", width, height );
+					return g_pMainIntzSurface;
+				}
+			}
+
+			LogMessage( "D3D9 DEPTH: Failed to create INTZ texture %ux%u hr=0x%08lX", width, height, hr );
+			return nullptr;
+		}
+
+		void ResetMainIntz()
+		{
+			if ( g_pMainIntzSurface )
+			{
+				g_pMainIntzSurface->Release();
+				g_pMainIntzSurface = nullptr;
+			}
+			if ( g_pMainIntzTexture )
+			{
+				g_pMainIntzTexture->Release();
+				g_pMainIntzTexture = nullptr;
+			}
+			g_nMainIntzWidth = 0;
+			g_nMainIntzHeight = 0;
+		}
+
 		class D3D9DepthCopier
 		{
 		public:
@@ -248,7 +322,7 @@ namespace art
 
 			HRESULT CopyDepthBuffer( IDirect3DDevice9 *device, IDirect3DSurface9 *srcDepthSurface, uint32_t width, uint32_t height )
 			{
-				if ( !device || !srcDepthSurface || width == 0 || height == 0 )
+				if ( !device || width == 0 || height == 0 )
 					return D3DERR_INVALIDCALL;
 
 				HRESULT hr = EnsureBuffers( device, width, height );
@@ -256,9 +330,20 @@ namespace art
 					return hr;
 
 				IDirect3DTexture9 *srcTexture = nullptr;
-				hr = srcDepthSurface->GetContainer( IID_PPV_ARGS( &srcTexture ) );
-				if ( FAILED( hr ) || !srcTexture )
-					return hr;
+				if ( srcDepthSurface )
+				{
+					srcDepthSurface->GetContainer( IID_PPV_ARGS( &srcTexture ) );
+				}
+				if ( !srcTexture && g_pMainIntzTexture )
+				{
+					srcTexture = g_pMainIntzTexture;
+					srcTexture->AddRef();
+				}
+				if ( !srcTexture )
+				{
+					LogMessage( "D3D9 DEPTH: CopyDepthBuffer could not obtain source INTZ texture" );
+					return D3DERR_INVALIDCALL;
+				}
 
 				InitCopyStateBlock( device );
 
@@ -286,32 +371,24 @@ namespace art
 				vp.MaxZ = 1.0f;
 				device->SetViewport( &vp );
 
-				// D3D9 half-pixel offset calculation
-				const float halfPixelOffset[2] = {
-					-1.0f / static_cast<float>( width ),
-					 1.0f / static_cast<float>( height )
-				};
-
-				struct Vertex
+				struct VertexRHW
 				{
-					float x, y, z;
+					float x, y, z, rhw;
 					float u, v;
 				};
 
-				Vertex vertices[3] = {
-					{ -1.0f,  1.0f,  0.0f,  0.0f, 0.0f },
-					{  3.0f,  1.0f,  0.0f,  2.0f, 0.0f },
-					{ -1.0f, -3.0f,  0.0f,  0.0f, 2.0f }
+				const float w = static_cast<float>( width );
+				const float h = static_cast<float>( height );
+
+				VertexRHW vertices[4] = {
+					{ -0.5f,     -0.5f,     0.0f, 1.0f, 0.0f, 0.0f },
+					{ w - 0.5f,  -0.5f,     0.0f, 1.0f, 1.0f, 0.0f },
+					{ -0.5f,     h - 0.5f,  0.0f, 1.0f, 0.0f, 1.0f },
+					{ w - 0.5f,  h - 0.5f,  0.0f, 1.0f, 1.0f, 1.0f }
 				};
 
-				for ( int i = 0; i < 3; ++i )
-				{
-					vertices[i].x += halfPixelOffset[0];
-					vertices[i].y += halfPixelOffset[1];
-				}
-
-				device->SetFVF( D3DFVF_XYZ | D3DFVF_TEX1 );
-				device->DrawPrimitiveUP( D3DPT_TRIANGLELIST, 1, vertices, sizeof( Vertex ) );
+				device->SetFVF( D3DFVF_XYZRHW | D3DFVF_TEX1 );
+				device->DrawPrimitiveUP( D3DPT_TRIANGLESTRIP, 2, vertices, sizeof( VertexRHW ) );
 
 				device->SetTexture( 0, nullptr );
 
@@ -340,8 +417,6 @@ namespace art
 			uint32_t _backupHeight;
 		};
 
-		bool g_bIntzSupported = false;
-		bool g_bIntzChecked = false;
 		D3D9DepthCopier g_DepthCopier;
 	}
 
@@ -395,44 +470,52 @@ namespace art
 
 		D3DSURFACE_DESC desc = {};
 		pCurrentSurface->GetDesc( &desc );
-
-		if ( desc.Format == D3DFMT_INTZ )
-		{
-			pCurrentSurface->Release();
-			return true;
-		}
-
 		pCurrentSurface->Release();
 
-		if ( desc.MultiSampleType != D3DMULTISAMPLE_NONE )
-			return false;
+		if ( desc.Format == D3DFMT_INTZ )
+			return true;
 
-		IDirect3DTexture9 *pIntzTexture = nullptr;
-		hr = pDevice->CreateTexture(
-			desc.Width,
-			desc.Height,
-			1,
-			D3DUSAGE_DEPTHSTENCIL,
-			D3DFMT_INTZ,
-			D3DPOOL_DEFAULT,
-			&pIntzTexture,
-			nullptr
-		);
-
-		if ( FAILED( hr ) || !pIntzTexture )
-			return false;
-
-		IDirect3DSurface9 *pIntzSurface = nullptr;
-		hr = pIntzTexture->GetSurfaceLevel( 0, &pIntzSurface );
-		if ( SUCCEEDED( hr ) && pIntzSurface )
+		if ( desc.Width >= 512 && desc.Height >= 512 && desc.MultiSampleType == D3DMULTISAMPLE_NONE )
 		{
-			pDevice->SetDepthStencilSurface( pIntzSurface );
-			LogMessage( "D3D9 DEPTH: activated INTZ depth buffer %ux%u", desc.Width, desc.Height );
-			pIntzSurface->Release();
+			IDirect3DSurface9 *pIntz = GetOrCreateMainIntzSurface( pDevice, desc.Width, desc.Height );
+			if ( pIntz )
+			{
+				pDevice->SetDepthStencilSurface( pIntz );
+				LogMessage( "D3D9 DEPTH: explicitly activated INTZ depth buffer %ux%u", desc.Width, desc.Height );
+				return true;
+			}
 		}
-		pIntzTexture->Release();
 
-		return SUCCEEDED( hr );
+		return false;
+	}
+
+	HRESULT HandleD3D9SetDepthStencilSurface(
+		IDirect3DDevice9 *pDevice,
+		IDirect3DSurface9 *pNewZStencil,
+		HRESULT ( WINAPI *pOriginalSet )( IDirect3DDevice9 *, IDirect3DSurface9 * )
+	)
+	{
+		if ( !pDevice || !pOriginalSet )
+			return D3DERR_INVALIDCALL;
+
+		if ( pNewZStencil && g_bIntzSupported )
+		{
+			D3DSURFACE_DESC desc = {};
+			if ( SUCCEEDED( pNewZStencil->GetDesc( &desc ) ) )
+			{
+				if ( desc.Format != D3DFMT_INTZ && desc.Width >= 512 && desc.Height >= 512 &&
+					desc.MultiSampleType == D3DMULTISAMPLE_NONE )
+				{
+					IDirect3DSurface9 *pIntz = GetOrCreateMainIntzSurface( pDevice, desc.Width, desc.Height );
+					if ( pIntz )
+					{
+						return pOriginalSet( pDevice, pIntz );
+					}
+				}
+			}
+		}
+
+		return pOriginalSet( pDevice, pNewZStencil );
 	}
 
 	HRESULT HandleD3D9CreateDepthStencilSurface(
@@ -448,33 +531,18 @@ namespace art
 		HRESULT ( WINAPI *pOriginalCreate )( IDirect3DDevice9 *, UINT, UINT, D3DFORMAT, D3DMULTISAMPLE_TYPE, DWORD, BOOL, IDirect3DSurface9 **, HANDLE * )
 	)
 	{
-		if ( InterlockedCompareExchange( &g_nArtDepthMode, 0, 0 ) == ART_DEPTH_MODE_D3D9 &&
-			g_bIntzSupported && Width > 512 && Height > 512 && MultiSample == D3DMULTISAMPLE_NONE )
+		if ( !pDevice || !ppSurface )
+			return D3DERR_INVALIDCALL;
+
+		if ( g_bIntzSupported && Width >= 512 && Height >= 512 && MultiSample == D3DMULTISAMPLE_NONE )
 		{
-			IDirect3DTexture9 *pTexture = nullptr;
-			HRESULT hr = pDevice->CreateTexture(
-				Width,
-				Height,
-				1,
-				D3DUSAGE_DEPTHSTENCIL,
-				D3DFMT_INTZ,
-				D3DPOOL_DEFAULT,
-				&pTexture,
-				nullptr
-			);
-
-			if ( SUCCEEDED( hr ) && pTexture )
+			IDirect3DSurface9 *pIntz = GetOrCreateMainIntzSurface( pDevice, Width, Height );
+			if ( pIntz )
 			{
-				IDirect3DSurface9 *pLevel0 = nullptr;
-				hr = pTexture->GetSurfaceLevel( 0, &pLevel0 );
-				pTexture->Release();
-
-				if ( SUCCEEDED( hr ) && pLevel0 )
-				{
-					*ppSurface = pLevel0;
-					LogMessage( "D3D9 DEPTH: substituted INTZ depth-stencil surface %ux%u", Width, Height );
-					return D3D_OK;
-				}
+				pIntz->AddRef();
+				*ppSurface = pIntz;
+				LogMessage( "D3D9 DEPTH: CreateDepthStencilSurface substituted INTZ %ux%u", Width, Height );
+				return D3D_OK;
 			}
 		}
 
@@ -494,6 +562,7 @@ namespace art
 
 	void HandleD3D9Reset()
 	{
+		ResetMainIntz();
 		g_DepthCopier.Reset();
 	}
 

@@ -55,6 +55,12 @@ namespace art
 	void HandleD3D9Present( IDirect3DDevice9 *pDevice, uint32_t backbufferWidth, uint32_t backbufferHeight );
 	void HandleD3D9Reset();
 
+	HRESULT HandleD3D9SetDepthStencilSurface(
+		IDirect3DDevice9 *pDevice,
+		IDirect3DSurface9 *pNewZStencil,
+		HRESULT ( WINAPI *pOriginalSet )( IDirect3DDevice9 *, IDirect3DSurface9 * )
+	);
+
 	// Ensures active depth-stencil is an INTZ texture surface
 	bool EnsureActiveDepthSurfaceIsIntz( IDirect3DDevice9 *pDevice );
 

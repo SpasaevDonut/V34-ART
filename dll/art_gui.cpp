@@ -90,6 +90,7 @@ namespace
 	static const int kD3D9EndSceneIndex = 42;
 	static const int kD3D9SwapChainPresentIndex = 3;
 	static const int kD3D9CreateDepthStencilSurfaceIndex = 29;
+	static const int kD3D9SetDepthStencilSurfaceIndex = 39;
 	static const int kMaxCommandHistory = 18;
 	static const int kDemoPlayerRefreshMinimumAttempts = 6;
 	static const int kDemoPlayerRefreshMaximumAttempts = 60;
@@ -109,6 +110,7 @@ namespace
 	typedef HRESULT ( WINAPI *SwapChainPresentFn )( IDirect3DSwapChain9 *, const RECT *, const RECT *, HWND,
 		const RGNDATA *, DWORD );
 	typedef HRESULT ( WINAPI *CreateDepthStencilSurfaceFn )( IDirect3DDevice9 *, UINT, UINT, D3DFORMAT, D3DMULTISAMPLE_TYPE, DWORD, BOOL, IDirect3DSurface9 **, HANDLE * );
+	typedef HRESULT ( WINAPI *SetDepthStencilSurfaceFn )( IDirect3DDevice9 *, IDirect3DSurface9 * );
 	typedef BOOL ( WINAPI *GetCursorPosFn )( POINT * );
 	typedef BOOL ( WINAPI *SetCursorPosFn )( int, int );
 	typedef BOOL ( WINAPI *ClipCursorFn )( const RECT * );
@@ -313,6 +315,7 @@ namespace
 	void *g_pEndSceneTarget = NULL;
 	void *g_pSwapChainPresentTarget = NULL;
 	void *g_pCreateDepthStencilSurfaceTarget = NULL;
+	void *g_pSetDepthStencilSurfaceTarget = NULL;
 	void *g_pGetCursorPosTarget = NULL;
 	void *g_pSetCursorPosTarget = NULL;
 	void *g_pClipCursorTarget = NULL;
@@ -322,6 +325,7 @@ namespace
 	EndSceneFn g_pOriginalEndScene = NULL;
 	SwapChainPresentFn g_pOriginalSwapChainPresent = NULL;
 	CreateDepthStencilSurfaceFn g_pOriginalCreateDepthStencilSurface = NULL;
+	SetDepthStencilSurfaceFn g_pOriginalSetDepthStencilSurface = NULL;
 	GetCursorPosFn g_pOriginalGetCursorPos = NULL;
 	SetCursorPosFn g_pOriginalSetCursorPos = NULL;
 	ClipCursorFn g_pOriginalClipCursor = NULL;
@@ -332,6 +336,7 @@ namespace
 	bool g_bEndSceneHookCreated = false;
 	bool g_bSwapChainPresentHookCreated = false;
 	bool g_bCreateDepthStencilSurfaceHookCreated = false;
+	bool g_bSetDepthStencilSurfaceHookCreated = false;
 	bool g_bGetCursorPosHookCreated = false;
 	bool g_bSetCursorPosHookCreated = false;
 	bool g_bClipCursorHookCreated = false;
@@ -6810,6 +6815,11 @@ namespace
 			MultisampleQuality, Discard, ppSurface, pSharedHandle, g_pOriginalCreateDepthStencilSurface );
 	}
 
+	HRESULT WINAPI HookedSetDepthStencilSurface( IDirect3DDevice9 *pDevice, IDirect3DSurface9 *pNewZStencil )
+	{
+		return HandleD3D9SetDepthStencilSurface( pDevice, pNewZStencil, g_pOriginalSetDepthStencilSurface );
+	}
+
 	HRESULT WINAPI HookedReset( IDirect3DDevice9 *pDevice, D3DPRESENT_PARAMETERS *pParameters )
 	{
 		if ( InterlockedCompareExchange( &g_bArtGuiTerminating, FALSE, FALSE ) )
@@ -7406,6 +7416,11 @@ namespace
 			MH_RemoveHook( g_pGetCursorPosTarget );
 		}
 
+		if ( g_bSetDepthStencilSurfaceHookCreated )
+		{
+			MH_DisableHook( g_pSetDepthStencilSurfaceTarget );
+			MH_RemoveHook( g_pSetDepthStencilSurfaceTarget );
+		}
 		if ( g_bCreateDepthStencilSurfaceHookCreated )
 		{
 			MH_DisableHook( g_pCreateDepthStencilSurfaceTarget );
@@ -7441,6 +7456,7 @@ namespace
 		g_bEndSceneHookCreated = false;
 		g_bSwapChainPresentHookCreated = false;
 		g_bCreateDepthStencilSurfaceHookCreated = false;
+		g_bSetDepthStencilSurfaceHookCreated = false;
 		g_bGetCursorPosHookCreated = false;
 		g_bSetCursorPosHookCreated = false;
 		g_bClipCursorHookCreated = false;
@@ -7450,6 +7466,7 @@ namespace
 		g_pEndSceneTarget = NULL;
 		g_pSwapChainPresentTarget = NULL;
 		g_pCreateDepthStencilSurfaceTarget = NULL;
+		g_pSetDepthStencilSurfaceTarget = NULL;
 		g_pGetCursorPosTarget = NULL;
 		g_pSetCursorPosTarget = NULL;
 		g_pClipCursorTarget = NULL;
@@ -7459,6 +7476,7 @@ namespace
 		g_pOriginalEndScene = NULL;
 		g_pOriginalSwapChainPresent = NULL;
 		g_pOriginalCreateDepthStencilSurface = NULL;
+		g_pOriginalSetDepthStencilSurface = NULL;
 		g_pOriginalGetCursorPos = NULL;
 		g_pOriginalSetCursorPos = NULL;
 		g_pOriginalClipCursor = NULL;
@@ -7541,6 +7559,7 @@ namespace
 		g_pEndSceneTarget = pDeviceVtable[kD3D9EndSceneIndex];
 		g_pSwapChainPresentTarget = pSwapChainVtable[kD3D9SwapChainPresentIndex];
 		g_pCreateDepthStencilSurfaceTarget = pDeviceVtable[kD3D9CreateDepthStencilSurfaceIndex];
+		g_pSetDepthStencilSurfaceTarget = pDeviceVtable[kD3D9SetDepthStencilSurfaceIndex];
 
 		HMODULE hUser32 = GetModuleHandleA( "user32.dll" );
 		g_pGetCursorPosTarget = hUser32 ? reinterpret_cast<void *>( GetProcAddress( hUser32, "GetCursorPos" ) ) : NULL;
@@ -7586,6 +7605,9 @@ namespace
 			CreateQueuedHook( g_pCreateDepthStencilSurfaceTarget, reinterpret_cast<void *>( HookedCreateDepthStencilSurface ),
 				reinterpret_cast<void **>( &g_pOriginalCreateDepthStencilSurface ), &g_bCreateDepthStencilSurfaceHookCreated,
 				"CreateDepthStencilSurface" ) &&
+			CreateQueuedHook( g_pSetDepthStencilSurfaceTarget, reinterpret_cast<void *>( HookedSetDepthStencilSurface ),
+				reinterpret_cast<void **>( &g_pOriginalSetDepthStencilSurface ), &g_bSetDepthStencilSurfaceHookCreated,
+				"SetDepthStencilSurface" ) &&
 			CreateQueuedHook( g_pGetCursorPosTarget, reinterpret_cast<void *>( HookedGetCursorPos ),
 				reinterpret_cast<void **>( &g_pOriginalGetCursorPos ), &g_bGetCursorPosHookCreated,
 				"GetCursorPos" ) &&
@@ -7622,9 +7644,9 @@ namespace
 			return false;
 		}
 
-		LogMessage( "GUI DETOURS READY: reset=%p present=%p end_scene=%p swap_present=%p depth_surface=%p get_cursor_pos=%p set_cursor_pos=%p clip_cursor=%p set_cursor=%p minhook=%s",
+		LogMessage( "GUI DETOURS READY: reset=%p present=%p end_scene=%p swap_present=%p depth_surface=%p set_depth_surface=%p get_cursor_pos=%p set_cursor_pos=%p clip_cursor=%p set_cursor=%p minhook=%s",
 			g_pResetTarget, g_pPresentTarget, g_pEndSceneTarget, g_pSwapChainPresentTarget,
-			g_pCreateDepthStencilSurfaceTarget,
+			g_pCreateDepthStencilSurfaceTarget, g_pSetDepthStencilSurfaceTarget,
 			g_pGetCursorPosTarget, g_pSetCursorPosTarget,
 			g_pClipCursorTarget, g_pSetCursorTarget, kMinHookVersionPinned );
 		return true;
