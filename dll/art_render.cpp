@@ -580,7 +580,25 @@ class HidePlayersRenderScope
 				{
 					LogMessage( "PASS BEGIN: frame=%d pass='depth' mode=d3d9_precise depth_start=%g depth_end=%g",
 						g_nFrame, art_depth_start.GetFloat(), art_depth_end.GetFloat() );
-					ArtScopedStageTiming renderTiming( ART_TIMING_RENDER );
+
+					IDirect3DDevice9 *pDevice = GetArtGuiDevice();
+					if ( pDevice )
+					{
+						EnsureActiveDepthSurfaceIsIntz( pDevice );
+					}
+
+					CViewSetup utilityView = view;
+					utilityView.m_bDoBloomAndToneMapping = false;
+					CConVarRestore vars;
+					ApplyHudSetting( vars, hudMask, ART_RECORD_DEPTH );
+					g_pMaterials->ClearColor4ub( 0, 0, 0, 255 );
+					{
+						ArtScopedStageTiming renderTiming( ART_TIMING_RENDER );
+						g_pClient->RenderViewEx( utilityView, clearFlags,
+							AddHudDrawFlag( 0, hudMask, ART_RECORD_DEPTH ) );
+					}
+					LogMessage( "PASS RENDER COMPLETE: frame=%d pass='depth' mode=d3d9_precise", g_nFrame );
+
 					ok = CapturePreciseDepthPass( view, "depth" );
 					LogMessage( "PASS END: frame=%d pass='depth' mode=d3d9_precise success=%d", g_nFrame, ok ? 1 : 0 );
 				}

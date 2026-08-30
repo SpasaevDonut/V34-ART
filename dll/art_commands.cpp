@@ -1084,6 +1084,10 @@ namespace art
 			const char *pMode = g_pEngine->Cmd_Argv( 1 );
 			const LONG newMode = ArtDepthModeFromName( pMode );
 			InterlockedExchange( &g_nArtDepthMode, newMode );
+			if ( newMode == ART_DEPTH_MODE_D3D9 )
+			{
+				EnsureActiveDepthSurfaceIsIntz( GetArtGuiDevice() );
+			}
 			LogMessage( "DEPTH MODE CHANGED: mode='%s'", GetArtDepthModeName( newMode ) );
 			ArtConsoleMessage( "art_depth_mode: mode set to '%s'%s.\n",
 				GetArtDepthModeName( newMode ),

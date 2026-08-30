@@ -41,11 +41,21 @@ namespace art
 
 	namespace
 	{
+		static const DWORD kPsCopyDepthBytecode[] = {
+			0xFFFF0200,                                      // ps_2_0
+			0x0200001F, 0x80000000, 0x900F0000,             // dcl_2d s0
+			0x0200001F, 0x80000005, 0x80030000,             // dcl t0.xy
+			0x03000042, 0x800F0000, 0x80E40000, 0x90E40000, // texld r0, t0, s0
+			0x02000001, 0x800F0800, 0x80E40000,             // mov oC0, r0
+			0x0000FFFF                                      // end
+		};
+
 		class D3D9DepthCopier
 		{
 		public:
 			D3D9DepthCopier() :
 				_copyState( nullptr ),
+				_pixelShader( nullptr ),
 				_backupTexture( nullptr ),
 				_backupSurface( nullptr ),
 				_stagingSurface( nullptr ),
@@ -65,6 +75,11 @@ namespace art
 				{
 					_copyState->Release();
 					_copyState = nullptr;
+				}
+				if ( _pixelShader )
+				{
+					_pixelShader->Release();
+					_pixelShader = nullptr;
 				}
 				if ( _stagingSurface )
 				{
@@ -92,11 +107,19 @@ namespace art
 				if ( !device )
 					return D3DERR_INVALIDCALL;
 
+				if ( !_pixelShader )
+				{
+					device->CreatePixelShader( kPsCopyDepthBytecode, &_pixelShader );
+				}
+
 				HRESULT hr = device->BeginStateBlock();
 				if ( FAILED( hr ) )
 					return hr;
 
-				device->SetPixelShader( nullptr );
+				if ( _pixelShader )
+					device->SetPixelShader( _pixelShader );
+				else
+					device->SetPixelShader( nullptr );
 				device->SetVertexShader( nullptr );
 
 				device->SetRenderState( D3DRS_ZENABLE, FALSE );
@@ -251,6 +274,8 @@ namespace art
 				device->SetRenderTarget( 0, _backupSurface );
 				device->SetDepthStencilSurface( nullptr );
 				device->SetTexture( 0, srcTexture );
+				if ( _pixelShader )
+					device->SetPixelShader( _pixelShader );
 
 				D3DVIEWPORT9 vp = {};
 				vp.X = 0;
@@ -307,6 +332,7 @@ namespace art
 
 		private:
 			IDirect3DStateBlock9 *_copyState;
+			IDirect3DPixelShader9 *_pixelShader;
 			IDirect3DTexture9 *_backupTexture;
 			IDirect3DSurface9 *_backupSurface;
 			IDirect3DSurface9 *_stagingSurface;
@@ -507,6 +533,10 @@ namespace art
 			return false;
 		}
 
+		D3DSURFACE_DESC desc = {};
+		pStaging->GetDesc( &desc );
+		const bool isFloat = ( desc.Format == D3DFMT_R32F );
+
 		const float nearPlane = ( zNear > 0.0f ) ? zNear : 3.0f;
 		const float farPlane = ( zFar > nearPlane ) ? zFar : 20000.0f;
 		const float rangeSpan = ( depthEnd > depthStart ) ? ( depthEnd - depthStart ) : 1.0f;
@@ -521,7 +551,6 @@ namespace art
 			if ( srcRow < 0 || srcRow >= static_cast<int>( surfHeight ) )
 				continue;
 
-			const float *pSrcRowFloat = reinterpret_cast<const float *>( pSrcBytes + srcRow * locked.Pitch );
 			unsigned char *pDstRow = pOutRgb + ( row * width * 3 );
 
 			for ( int col = 0; col < width; ++col )
@@ -530,13 +559,27 @@ namespace art
 				float rawDepth = 1.0f;
 				if ( srcCol >= 0 && srcCol < static_cast<int>( surfWidth ) )
 				{
-					rawDepth = pSrcRowFloat[srcCol];
+					if ( isFloat )
+					{
+						const float *pRowFloat = reinterpret_cast<const float *>( pSrcBytes + srcRow * locked.Pitch );
+						rawDepth = pRowFloat[srcCol];
+					}
+					else
+					{
+						// D3DFMT_A8R8G8B8/X8R8G8B8 format fallback
+						const unsigned char *pPixel = pSrcBytes + srcRow * locked.Pitch + srcCol * 4;
+						rawDepth = static_cast<float>( pPixel[2] ) / 255.0f;
+					}
 				}
 
 				float linearZ;
-				if ( rawDepth >= 0.99999f || rawDepth <= 0.0f )
+				if ( rawDepth >= 0.99999f )
 				{
 					linearZ = farPlane;
+				}
+				else if ( rawDepth <= 0.00001f )
+				{
+					linearZ = nearPlane;
 				}
 				else
 				{

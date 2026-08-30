@@ -3924,12 +3924,18 @@ namespace
 			IssueCommand( "art_depth_end %.3f", depthEnd );
 
 		LONG currentDepthMode = InterlockedCompareExchange( &g_nArtDepthMode, 0, 0 );
-		int depthModeIndex = static_cast<int>( currentDepthMode );
+		int depthModeIndex = ( currentDepthMode == ART_DEPTH_MODE_D3D9 ) ? 1 : 0;
 		static const char *depthModeNames[] = { "Fog (Source Engine classic)", "Hardware D3D9 (INTZ / Precise)" };
 		ImGui::SetNextItemWidth( 330 );
 		if ( ImGui::Combo( "Depth extraction mode", &depthModeIndex, depthModeNames, ARRAYSIZE( depthModeNames ) ) )
 		{
-			IssueCommand( "art_depth_mode %s", depthModeIndex == 1 ? "d3d9" : "fog" );
+			const LONG newMode = ( depthModeIndex == 1 ) ? ART_DEPTH_MODE_D3D9 : ART_DEPTH_MODE_FOG;
+			InterlockedExchange( &g_nArtDepthMode, newMode );
+			if ( newMode == ART_DEPTH_MODE_D3D9 )
+			{
+				EnsureActiveDepthSurfaceIsIntz( GetArtGuiDevice() );
+			}
+			IssueCommand( "art_depth_mode %s", ( newMode == ART_DEPTH_MODE_D3D9 ) ? "d3d9" : "fog" );
 		}
 		if ( depthModeIndex == 1 )
 		{
