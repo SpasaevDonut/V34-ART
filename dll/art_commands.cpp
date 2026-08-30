@@ -1094,6 +1094,83 @@ namespace art
 				( newMode == ART_DEPTH_MODE_D3D9 && !IsD3D9IntzSupported() ) ? " (warning: INTZ not supported by GPU)" : "" );
 		}
 
+		void ArtDepthCurve_f()
+		{
+			const int argc = g_pEngine ? g_pEngine->Cmd_Argc() : 0;
+			const LONG currentCurve = InterlockedCompareExchange( &g_nArtDepthCurve, 0, 0 );
+			if ( argc == 1 )
+			{
+				ArtConsoleMessage( "art_depth_curve is '%s'. Usage: art_depth_curve <linear|log|logarithmic>.\n",
+					GetArtDepthCurveName( currentCurve ) );
+				return;
+			}
+			if ( argc != 2 )
+			{
+				ArtConsoleMessage( "Usage: art_depth_curve <linear|log|logarithmic>.\n" );
+				return;
+			}
+			const char *pCurve = g_pEngine->Cmd_Argv( 1 );
+			const LONG newCurve = ArtDepthCurveFromName( pCurve );
+			InterlockedExchange( &g_nArtDepthCurve, newCurve );
+			art_depth_curve.SetValue( GetArtDepthCurveName( newCurve ) );
+			LogMessage( "DEPTH CURVE CHANGED: curve='%s'", GetArtDepthCurveName( newCurve ) );
+			ArtConsoleMessage( "art_depth_curve: curve set to '%s'.\n", GetArtDepthCurveName( newCurve ) );
+		}
+
+		void ArtDepthVal_f()
+		{
+			const int argc = g_pEngine ? g_pEngine->Cmd_Argc() : 0;
+			if ( argc == 1 )
+			{
+				ArtConsoleMessage( "art_depth_val is %g (alias of art_depth_start). Usage: art_depth_val <distance>.\n",
+					art_depth_start.GetFloat() );
+				return;
+			}
+			if ( argc != 2 )
+			{
+				ArtConsoleMessage( "Usage: art_depth_val <distance>.\n" );
+				return;
+			}
+			char *pEnd = NULL;
+			const float val = static_cast<float>( strtod( g_pEngine->Cmd_Argv( 1 ), &pEnd ) );
+			if ( !pEnd || *pEnd != '\0' || val < 0.0f )
+			{
+				ArtConsoleMessage( "art_depth_val: invalid distance value.\n" );
+				return;
+			}
+			art_depth_start.SetValue( val );
+			art_depth_val.SetValue( val );
+			LogMessage( "DEPTH VAL CHANGED: depth_val=%g", val );
+			ArtConsoleMessage( "art_depth_val: set to %g.\n", val );
+		}
+
+		void ArtDepthValMax_f()
+		{
+			const int argc = g_pEngine ? g_pEngine->Cmd_Argc() : 0;
+			if ( argc == 1 )
+			{
+				ArtConsoleMessage( "art_depth_val_max is %g (alias of art_depth_end). Usage: art_depth_val_max <distance>.\n",
+					art_depth_end.GetFloat() );
+				return;
+			}
+			if ( argc != 2 )
+			{
+				ArtConsoleMessage( "Usage: art_depth_val_max <distance>.\n" );
+				return;
+			}
+			char *pEnd = NULL;
+			const float val = static_cast<float>( strtod( g_pEngine->Cmd_Argv( 1 ), &pEnd ) );
+			if ( !pEnd || *pEnd != '\0' || val < 0.0f )
+			{
+				ArtConsoleMessage( "art_depth_val_max: invalid distance value.\n" );
+				return;
+			}
+			art_depth_end.SetValue( val );
+			art_depth_val_max.SetValue( val );
+			LogMessage( "DEPTH VAL MAX CHANGED: depth_val_max=%g", val );
+			ArtConsoleMessage( "art_depth_val_max: set to %g.\n", val );
+		}
+
 		ConCommand art_start( "art_start", ArtStart_f,
 			"Start synchronized multi-pass TGA recording. Usage: art_start [take_name]" );
 		ConCommand art_stop( "art_stop", ArtStop_f,
@@ -1142,6 +1219,12 @@ namespace art
 			"Advance live preview to the next recording pass." );
 		ConCommand art_depth_mode( "art_depth_mode", ArtDepthMode_f,
 			"Set depth pass extraction method: 'fog' or 'd3d9' / 'precise'. Usage: art_depth_mode <fog|d3d9|precise>." );
+		ConCommand art_depth_curve( "art_depth_curve", ArtDepthCurve_f,
+			"Set depth curve distribution: 'linear' or 'logarithmic' ('log'). Usage: art_depth_curve <linear|log|logarithmic>." );
+		ConCommand art_depth_val( "art_depth_val", ArtDepthVal_f,
+			"Set near depth value (DepthVal / depth start). Usage: art_depth_val <distance>." );
+		ConCommand art_depth_val_max( "art_depth_val_max", ArtDepthValMax_f,
+			"Set far depth value (DepthValMax / depth end). Usage: art_depth_val_max <distance>." );
 		ConCommand art_help( "art_help", ArtHelp_f,
 			"Print the v34_art command reference." );
 		ConCommand art_debug( "art_debug", ArtDebug_f,
@@ -1170,7 +1253,8 @@ namespace art
 				!Q_stricmp( pName, "art_ffmpeg_test" ) || !Q_stricmp( pName, "art_ffmpeg_status" ) ||
 				!Q_stricmp( pName, "art_demo_unpause_on_recording" ) ||
 				!Q_stricmp( pName, "art_prefix" ) || !Q_stricmp( pName, "art_viewmodel_fov" ) ||
-				!Q_stricmp( pName, "art_depth_mode" ) ||
+				!Q_stricmp( pName, "art_depth_mode" ) || !Q_stricmp( pName, "art_depth_curve" ) ||
+				!Q_stricmp( pName, "art_depth_val" ) || !Q_stricmp( pName, "art_depth_val_max" ) ||
 				!Q_stricmp( pName, "art_help" ) || !Q_stricmp( pName, "art_debug" ) ) )
 			{
 				LogMessage( "COMMAND CONFLICT: found existing '%s' at %p after scanning %d entries", pName, pCommand, count );

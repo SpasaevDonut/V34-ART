@@ -15,6 +15,7 @@
 namespace art
 {
 	volatile LONG g_nArtDepthMode = ART_DEPTH_MODE_FOG;
+	volatile LONG g_nArtDepthCurve = ART_DEPTH_CURVE_LINEAR;
 
 	const char *GetArtDepthModeName( LONG mode )
 	{
@@ -37,6 +38,29 @@ namespace art
 			return ART_DEPTH_MODE_D3D9;
 		}
 		return ART_DEPTH_MODE_FOG;
+	}
+
+	const char *GetArtDepthCurveName( LONG curve )
+	{
+		switch ( curve )
+		{
+		case ART_DEPTH_CURVE_LOGARITHMIC:
+			return "logarithmic";
+		default:
+			return "linear";
+		}
+	}
+
+	LONG ArtDepthCurveFromName( const char *pName )
+	{
+		if ( !pName )
+			return ART_DEPTH_CURVE_LINEAR;
+		if ( !Q_stricmp( pName, "log" ) || !Q_stricmp( pName, "logarithmic" ) ||
+			!Q_stricmp( pName, "1" ) )
+		{
+			return ART_DEPTH_CURVE_LOGARITHMIC;
+		}
+		return ART_DEPTH_CURVE_LINEAR;
 	}
 
 	namespace
@@ -576,7 +600,8 @@ namespace art
 		float zNear,
 		float zFar,
 		float depthStart,
-		float depthEnd
+		float depthEnd,
+		LONG depthCurve
 	)
 	{
 		if ( !pDevice || !pOutRgb || width <= 0 || height <= 0 )
@@ -608,7 +633,9 @@ namespace art
 
 		const float nearPlane = ( zNear > 0.0f ) ? zNear : 3.0f;
 		const float farPlane = ( zFar > nearPlane ) ? zFar : 20000.0f;
-		const float rangeSpan = ( depthEnd > depthStart ) ? ( depthEnd - depthStart ) : 1.0f;
+		const float startVal = depthStart;
+		const float endVal = ( depthEnd > depthStart ) ? depthEnd : ( depthStart + 1.0f );
+		const float rangeSpan = endVal - startVal;
 		const uint32_t surfWidth = g_DepthCopier.GetWidth();
 		const uint32_t surfHeight = g_DepthCopier.GetHeight();
 
@@ -655,7 +682,25 @@ namespace art
 					linearZ = ( nearPlane * farPlane ) / ( farPlane - rawDepth * ( farPlane - nearPlane ) );
 				}
 
-				float norm = ( linearZ - depthStart ) / rangeSpan;
+				float norm;
+				if ( depthCurve == ART_DEPTH_CURVE_LOGARITHMIC )
+				{
+					if ( startVal > 0.001f && endVal > startVal )
+					{
+						const float zClamped = ( linearZ < startVal ) ? startVal : ( ( linearZ > endVal ) ? endVal : linearZ );
+						norm = logf( zClamped / startVal ) / logf( endVal / startVal );
+					}
+					else
+					{
+						const float clampedOffset = ( linearZ < startVal ) ? 0.0f : ( ( linearZ > endVal ) ? rangeSpan : ( linearZ - startVal ) );
+						norm = logf( 1.0f + clampedOffset ) / logf( 1.0f + rangeSpan );
+					}
+				}
+				else
+				{
+					norm = ( linearZ - startVal ) / rangeSpan;
+				}
+
 				if ( norm < 0.0f ) norm = 0.0f;
 				if ( norm > 1.0f ) norm = 1.0f;
 
@@ -712,6 +757,7 @@ namespace art
 		if ( !pPixels )
 			return false;
 
+		const LONG depthCurve = InterlockedCompareExchange( &g_nArtDepthCurve, 0, 0 );
 		const unsigned __int64 readTiming = BeginArtStageTiming();
 		const bool readOk = ReadPreciseDepthPixels(
 			pDevice,
@@ -723,7 +769,8 @@ namespace art
 			view.zNear,
 			view.zFar,
 			art_depth_start.GetFloat(),
-			art_depth_end.GetFloat()
+			art_depth_end.GetFloat(),
+			depthCurve
 		);
 		EndArtStageTiming( ART_TIMING_READ, readTiming );
 

@@ -1722,6 +1722,7 @@ namespace
 			"art_chams skybox_color 120 150 220\r\n"
 			"art_depth_start 150\r\n"
 			"art_depth_end 800\r\n"
+			"art_depth_curve linear\r\n"
 			"art_record path default\r\n"
 			"art_prefix default\r\n"
 			"art_debug off\r\n";
@@ -1974,6 +1975,7 @@ namespace
 			InterlockedCompareExchange( &g_nSkyboxChamsGreen, 0, 0 ),
 			InterlockedCompareExchange( &g_nSkyboxChamsBlue, 0, 0 ) );
 		AppendFormat( cfg, "art_depth_mode %s\r\n", GetArtDepthModeName( InterlockedCompareExchange( &g_nArtDepthMode, 0, 0 ) ) );
+		AppendFormat( cfg, "art_depth_curve %s\r\n", GetArtDepthCurveName( InterlockedCompareExchange( &g_nArtDepthCurve, 0, 0 ) ) );
 		AppendFormat( cfg, "art_depth_start %g\r\n", art_depth_start.GetFloat() );
 		AppendFormat( cfg, "art_depth_end %g\r\n", art_depth_end.GetFloat() );
 
@@ -3919,15 +3921,6 @@ namespace
 				static_cast<int>( playersBackgroundColor[1] * 255.0f + 0.5f ),
 				static_cast<int>( playersBackgroundColor[2] * 255.0f + 0.5f ) );
 		}
-		float depthStart = art_depth_start.GetFloat();
-		float depthEnd = art_depth_end.GetFloat();
-		ImGui::SetNextItemWidth( 330 );
-		if ( ImGui::DragFloat( "Depth start", &depthStart, 5.0f, 0.0f, 100000.0f, "%.0f" ) )
-			IssueCommand( "art_depth_start %.3f", depthStart );
-		ImGui::SetNextItemWidth( 330 );
-		if ( ImGui::DragFloat( "Depth end", &depthEnd, 5.0f, 0.0f, 100000.0f, "%.0f" ) )
-			IssueCommand( "art_depth_end %.3f", depthEnd );
-
 		LONG currentDepthMode = InterlockedCompareExchange( &g_nArtDepthMode, 0, 0 );
 		int depthModeIndex = ( currentDepthMode == ART_DEPTH_MODE_D3D9 ) ? 1 : 0;
 		static const char *depthModeNames[] = { "Fog (Source Engine classic)", "Hardware D3D9 (INTZ / Precise)" };
@@ -3942,8 +3935,29 @@ namespace
 			}
 			IssueCommand( "art_depth_mode %s", ( newMode == ART_DEPTH_MODE_D3D9 ) ? "d3d9" : "fog" );
 		}
+
 		if ( depthModeIndex == 1 )
 		{
+			LONG currentCurve = InterlockedCompareExchange( &g_nArtDepthCurve, 0, 0 );
+			int curveIndex = ( currentCurve == ART_DEPTH_CURVE_LOGARITHMIC ) ? 1 : 0;
+			static const char *curveNames[] = { "Linear", "Logarithmic" };
+			ImGui::SetNextItemWidth( 330 );
+			if ( ImGui::Combo( "Depth curve", &curveIndex, curveNames, ARRAYSIZE( curveNames ) ) )
+			{
+				const LONG newCurve = ( curveIndex == 1 ) ? ART_DEPTH_CURVE_LOGARITHMIC : ART_DEPTH_CURVE_LINEAR;
+				InterlockedExchange( &g_nArtDepthCurve, newCurve );
+				IssueCommand( "art_depth_curve %s", ( newCurve == ART_DEPTH_CURVE_LOGARITHMIC ) ? "log" : "linear" );
+			}
+
+			float depthVal = art_depth_start.GetFloat();
+			float depthValMax = art_depth_end.GetFloat();
+			ImGui::SetNextItemWidth( 330 );
+			if ( ImGui::DragFloat( "DepthVal (Near)", &depthVal, 5.0f, 0.0f, 100000.0f, "%.0f" ) )
+				IssueCommand( "art_depth_val %.3f", depthVal );
+			ImGui::SetNextItemWidth( 330 );
+			if ( ImGui::DragFloat( "DepthValMax (Far)", &depthValMax, 5.0f, 0.0f, 100000.0f, "%.0f" ) )
+				IssueCommand( "art_depth_val_max %.3f", depthValMax );
+
 			if ( IsD3D9IntzSupported() )
 			{
 				ImGui::TextColored( ImVec4( 0.35f, 0.95f, 0.35f, 1.0f ), "[Hardware D3D9 Ready (INTZ Buffer Active)]" );
@@ -3956,6 +3970,15 @@ namespace
 		}
 		else
 		{
+			float depthStart = art_depth_start.GetFloat();
+			float depthEnd = art_depth_end.GetFloat();
+			ImGui::SetNextItemWidth( 330 );
+			if ( ImGui::DragFloat( "Depth start", &depthStart, 5.0f, 0.0f, 100000.0f, "%.0f" ) )
+				IssueCommand( "art_depth_start %.3f", depthStart );
+			ImGui::SetNextItemWidth( 330 );
+			if ( ImGui::DragFloat( "Depth end", &depthEnd, 5.0f, 0.0f, 100000.0f, "%.0f" ) )
+				IssueCommand( "art_depth_end %.3f", depthEnd );
+
 			TextDisabledWrapped( "Fog mode renders the scene using Source Engine's white fog ramp between depth start and end." );
 		}
 		TextDisabledWrapped( "Viewmodel and Players use independent chroma colors. Depth fades from black nearby to white far away." );

@@ -22,15 +22,26 @@ namespace art
 		ART_DEPTH_MODE_D3D9 = 1
 	};
 
+	enum ArtDepthCurve
+	{
+		ART_DEPTH_CURVE_LINEAR = 0,
+		ART_DEPTH_CURVE_LOGARITHMIC = 1
+	};
+
 	static const LONG ART_DEPTH_FOG = ART_DEPTH_MODE_FOG;
 	static const LONG ART_DEPTH_D3D9 = ART_DEPTH_MODE_D3D9;
 	static const LONG ART_DEPTH_PRECISE = ART_DEPTH_MODE_D3D9;
 
 	extern volatile LONG g_nArtDepthMode;
+	extern volatile LONG g_nArtDepthCurve;
 
 	// Mode naming & parsing
 	const char *GetArtDepthModeName( LONG mode );
 	LONG ArtDepthModeFromName( const char *pName );
+
+	// Curve naming & parsing
+	const char *GetArtDepthCurveName( LONG curve );
+	LONG ArtDepthCurveFromName( const char *pName );
 
 	// Subsystem initialization and capabilities
 	bool InitializeD3D9Depth( IDirect3D9 *pD3D );
@@ -75,7 +86,8 @@ namespace art
 		float zNear,
 		float zFar,
 		float depthStart,
-		float depthEnd
+		float depthEnd,
+		LONG depthCurve
 	);
 
 	// Multi-pass capture helper
