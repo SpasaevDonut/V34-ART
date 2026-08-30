@@ -130,9 +130,6 @@ namespace art
 	extern float g_flGlobalFovMinUnzoomedFov;
 	extern ConVar art_depth_start;
 	extern ConVar art_depth_end;
-	extern ConVar art_depth_val;
-	extern ConVar art_depth_val_max;
-	extern ConVar art_depth_curve;
 
 	// Console and optional diagnostic file logging.
 	void ArtConsoleMessage( const char *pFormat, ... );

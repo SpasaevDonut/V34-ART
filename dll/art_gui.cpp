@@ -3953,10 +3953,16 @@ namespace
 			float depthValMax = art_depth_end.GetFloat();
 			ImGui::SetNextItemWidth( 330 );
 			if ( ImGui::DragFloat( "DepthVal (Near)", &depthVal, 5.0f, 0.0f, 100000.0f, "%.0f" ) )
-				IssueCommand( "art_depth_val %.3f", depthVal );
+			{
+				art_depth_start.SetValue( depthVal );
+				IssueCommand( "art_depth_start %.3f", depthVal );
+			}
 			ImGui::SetNextItemWidth( 330 );
 			if ( ImGui::DragFloat( "DepthValMax (Far)", &depthValMax, 5.0f, 0.0f, 100000.0f, "%.0f" ) )
-				IssueCommand( "art_depth_val_max %.3f", depthValMax );
+			{
+				art_depth_end.SetValue( depthValMax );
+				IssueCommand( "art_depth_end %.3f", depthValMax );
+			}
 
 			if ( IsD3D9IntzSupported() )
 			{
@@ -3974,10 +3980,16 @@ namespace
 			float depthEnd = art_depth_end.GetFloat();
 			ImGui::SetNextItemWidth( 330 );
 			if ( ImGui::DragFloat( "Depth start", &depthStart, 5.0f, 0.0f, 100000.0f, "%.0f" ) )
+			{
+				art_depth_start.SetValue( depthStart );
 				IssueCommand( "art_depth_start %.3f", depthStart );
+			}
 			ImGui::SetNextItemWidth( 330 );
 			if ( ImGui::DragFloat( "Depth end", &depthEnd, 5.0f, 0.0f, 100000.0f, "%.0f" ) )
+			{
+				art_depth_end.SetValue( depthEnd );
 				IssueCommand( "art_depth_end %.3f", depthEnd );
+			}
 
 			TextDisabledWrapped( "Fog mode renders the scene using Source Engine's white fog ramp between depth start and end." );
 		}

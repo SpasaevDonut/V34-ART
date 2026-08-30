@@ -49,12 +49,6 @@ namespace art
 		"Distance where the depth pass begins fading from black to white." );
 	ConVar art_depth_end( "art_depth_end", "800", FCVAR_ARCHIVE,
 		"Distance where the depth pass reaches white." );
-	ConVar art_depth_val( "art_depth_val", "150", FCVAR_ARCHIVE,
-		"Near distance (DepthVal) where depth begins fading from black (0)." );
-	ConVar art_depth_val_max( "art_depth_val_max", "800", FCVAR_ARCHIVE,
-		"Far distance (DepthValMax) where depth reaches white (255)." );
-	ConVar art_depth_curve( "art_depth_curve", "linear", FCVAR_ARCHIVE,
-		"Depth curve distribution: 'linear' or 'logarithmic' ('log')." );
 
 	const char *PreviewName( LONG preview )
 {

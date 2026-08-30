@@ -1112,7 +1112,6 @@ namespace art
 			const char *pCurve = g_pEngine->Cmd_Argv( 1 );
 			const LONG newCurve = ArtDepthCurveFromName( pCurve );
 			InterlockedExchange( &g_nArtDepthCurve, newCurve );
-			art_depth_curve.SetValue( GetArtDepthCurveName( newCurve ) );
 			LogMessage( "DEPTH CURVE CHANGED: curve='%s'", GetArtDepthCurveName( newCurve ) );
 			ArtConsoleMessage( "art_depth_curve: curve set to '%s'.\n", GetArtDepthCurveName( newCurve ) );
 		}
@@ -1139,7 +1138,6 @@ namespace art
 				return;
 			}
 			art_depth_start.SetValue( val );
-			art_depth_val.SetValue( val );
 			LogMessage( "DEPTH VAL CHANGED: depth_val=%g", val );
 			ArtConsoleMessage( "art_depth_val: set to %g.\n", val );
 		}
@@ -1166,7 +1164,6 @@ namespace art
 				return;
 			}
 			art_depth_end.SetValue( val );
-			art_depth_val_max.SetValue( val );
 			LogMessage( "DEPTH VAL MAX CHANGED: depth_val_max=%g", val );
 			ArtConsoleMessage( "art_depth_val_max: set to %g.\n", val );
 		}
