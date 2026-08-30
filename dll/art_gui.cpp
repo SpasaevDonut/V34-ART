@@ -89,7 +89,7 @@ namespace
 	static const int kD3D9PresentIndex = 17;
 	static const int kD3D9EndSceneIndex = 42;
 	static const int kD3D9SwapChainPresentIndex = 3;
-	static const int kD3D9CreateDepthStencilSurfaceIndex = 26;
+	static const int kD3D9CreateDepthStencilSurfaceIndex = 29;
 	static const int kMaxCommandHistory = 18;
 	static const int kDemoPlayerRefreshMinimumAttempts = 6;
 	static const int kDemoPlayerRefreshMaximumAttempts = 60;

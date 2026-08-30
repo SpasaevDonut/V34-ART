@@ -422,10 +422,8 @@ namespace art
 		HRESULT ( WINAPI *pOriginalCreate )( IDirect3DDevice9 *, UINT, UINT, D3DFORMAT, D3DMULTISAMPLE_TYPE, DWORD, BOOL, IDirect3DSurface9 **, HANDLE * )
 	)
 	{
-		if ( !pDevice || !ppSurface )
-			return D3DERR_INVALIDCALL;
-
-		if ( g_bIntzSupported && Width > 512 && Height > 512 && MultiSample == D3DMULTISAMPLE_NONE )
+		if ( InterlockedCompareExchange( &g_nArtDepthMode, 0, 0 ) == ART_DEPTH_MODE_D3D9 &&
+			g_bIntzSupported && Width > 512 && Height > 512 && MultiSample == D3DMULTISAMPLE_NONE )
 		{
 			IDirect3DTexture9 *pTexture = nullptr;
 			HRESULT hr = pDevice->CreateTexture(
@@ -458,7 +456,7 @@ namespace art
 		{
 			return pOriginalCreate( pDevice, Width, Height, Format, MultiSample, MultisampleQuality, Discard, ppSurface, pSharedHandle );
 		}
-		return pDevice->CreateDepthStencilSurface( Width, Height, Format, MultiSample, MultisampleQuality, Discard, ppSurface, pSharedHandle );
+		return D3DERR_INVALIDCALL;
 	}
 
 	void HandleD3D9Present( IDirect3DDevice9 *pDevice, uint32_t backbufferWidth, uint32_t backbufferHeight )
