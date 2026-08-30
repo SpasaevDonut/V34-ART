@@ -857,4 +857,286 @@ namespace art
 			view.fov, view.fovViewmodel );
 		return true;
 	}
+
+	bool RenderPreciseDepthPreview(
+		IDirect3DDevice9 *pDevice,
+		int x,
+		int y,
+		int width,
+		int height,
+		float zNear,
+		float zFar,
+		float depthStart,
+		float depthEnd,
+		LONG depthCurve
+	)
+	{
+		if ( !pDevice || width <= 0 || height <= 0 || !g_bIntzSupported )
+			return false;
+
+		IDirect3DTexture9 *srcTexture = g_pMainIntzTexture;
+		if ( !srcTexture )
+		{
+			IDirect3DSurface9 *pActiveDepth = nullptr;
+			if ( SUCCEEDED( pDevice->GetDepthStencilSurface( &pActiveDepth ) ) && pActiveDepth )
+			{
+				pActiveDepth->GetContainer( IID_PPV_ARGS( &srcTexture ) );
+				pActiveDepth->Release();
+			}
+		}
+		if ( !srcTexture )
+			return false;
+
+		static const BYTE s_kPsDepthPreviewBytecode[] =
+		{
+			  0,   2, 255, 255, 254, 255,
+			 46,   0,  67,  84,  65,  66,
+			 28,   0,   0,   0, 139,   0,
+			  0,   0,   0,   2, 255, 255,
+			  3,   0,   0,   0,  28,   0,
+			  0,   0,   0, 129,   0,   0,
+			132,   0,   0,   0,  88,   0,
+			  0,   0,   2,   0,   0,   0,
+			  1,   0,   2,   0,  92,   0,
+			  0,   0,   0,   0,   0,   0,
+			108,   0,   0,   0,   2,   0,
+			  1,   0,   1,   0,   6,   0,
+			 92,   0,   0,   0,   0,   0,
+			  0,   0, 111,   0,   0,   0,
+			  3,   0,   0,   0,   1,   0,
+			  2,   0, 116,   0,   0,   0,
+			  0,   0,   0,   0,  99,  48,
+			  0, 171,   1,   0,   3,   0,
+			  1,   0,   4,   0,   1,   0,
+			  0,   0,   0,   0,   0,   0,
+			 99,  49,   0, 115,  48,   0,
+			171, 171,   4,   0,  12,   0,
+			  1,   0,   1,   0,   1,   0,
+			  0,   0,   0,   0,   0,   0,
+			112, 115,  95,  50,  95,  48,
+			  0,  77, 105,  99, 114, 111,
+			115, 111, 102, 116,  32,  40,
+			 82,  41,  32,  72,  76,  83,
+			 76,  32,  83, 104,  97, 100,
+			101, 114,  32,  67, 111, 109,
+			112, 105, 108, 101, 114,  32,
+			 49,  48,  46,  49,   0, 171,
+			 81,   0,   0,   5,   2,   0,
+			 15, 160,  23, 183, 209,  56,
+			 88, 255, 127, 191, 172, 197,
+			 39,  55,   0,   0,   0,  63,
+			 81,   0,   0,   5,   3,   0,
+			 15, 160, 111,  18, 131,  58,
+			  0,   0,   0,   0,   0,   0,
+			128,  63,   0,   0,   0,   0,
+			 31,   0,   0,   2,   0,   0,
+			  0, 128,   0,   0,   3, 176,
+			 31,   0,   0,   2,   0,   0,
+			  0, 144,   0,   8,  15, 160,
+			 66,   0,   0,   3,   0,   0,
+			 15, 128,   0,   0, 228, 176,
+			  0,   8, 228, 160,   5,   0,
+			  0,   3,   0,   0,   2, 128,
+			  0,   0,  85, 160,   0,   0,
+			  0, 160,   2,   0,   0,   3,
+			  0,   0,   4, 128,   0,   0,
+			  0, 161,   0,   0,  85, 160,
+			  4,   0,   0,   4,   0,   0,
+			  4, 128,   0,   0,   0, 128,
+			  0,   0, 170, 129,   0,   0,
+			 85, 160,   6,   0,   0,   2,
+			  0,   0,   4, 128,   0,   0,
+			170, 128,   5,   0,   0,   3,
+			  0,   0,   2, 128,   0,   0,
+			170, 128,   0,   0,  85, 128,
+			  2,   0,   0,   3,   0,   0,
+			  4, 128,   0,   0,   0, 129,
+			  2,   0, 170, 160,   2,   0,
+			  0,   3,   0,   0,   1, 128,
+			  0,   0,   0, 128,   2,   0,
+			 85, 160,  88,   0,   0,   4,
+			  0,   0,   2, 128,   0,   0,
+			170, 128,   0,   0,   0, 160,
+			  0,   0,  85, 128,  88,   0,
+			  0,   4,   0,   0,   1, 128,
+			  0,   0,   0, 128,   0,   0,
+			 85, 160,   0,   0,  85, 128,
+			 11,   0,   0,   3,   1,   0,
+			  8, 128,   0,   0,   0, 128,
+			  0,   0, 170, 160,   2,   0,
+			  0,   3,   0,   0,   1, 128,
+			  0,   0,   0, 128,   0,   0,
+			170, 161,  10,   0,   0,   3,
+			  0,   0,   2, 128,   0,   0,
+			255, 160,   1,   0, 255, 128,
+			  6,   0,   0,   2,   0,   0,
+			  4, 128,   0,   0, 170, 160,
+			  5,   0,   0,   3,   0,   0,
+			  2, 128,   0,   0, 170, 128,
+			  0,   0,  85, 128,   5,   0,
+			  0,   3,   0,   0,   4, 128,
+			  0,   0, 170, 128,   0,   0,
+			255, 160,  15,   0,   0,   2,
+			  0,   0,   4, 128,   0,   0,
+			170, 128,   6,   0,   0,   2,
+			  0,   0,   4, 128,   0,   0,
+			170, 128,  15,   0,   0,   2,
+			  0,   0,   2, 128,   0,   0,
+			 85, 128,   5,   0,   0,   3,
+			  0,   0,   2, 128,   0,   0,
+			170, 128,   0,   0,  85, 128,
+			 11,   0,   0,   3,   1,   0,
+			  1, 128,   0,   0,   0, 128,
+			  3,   0,  85, 160,   2,   0,
+			  0,   3,   0,   0,   4, 128,
+			  0,   0, 170, 161,   0,   0,
+			255, 160,  11,   0,   0,   3,
+			  1,   0,   2, 128,   0,   0,
+			170, 128,   2,   0,   0, 160,
+			 10,   0,   0,   3,   0,   0,
+			  4, 128,   1,   0,  85, 128,
+			  1,   0,   0, 128,   2,   0,
+			  0,   3,   0,   0,   4, 128,
+			  0,   0, 170, 128,   3,   0,
+			170, 160,  15,   0,   0,   2,
+			  0,   0,   4, 128,   0,   0,
+			170, 128,   2,   0,   0,   3,
+			  0,   0,   8, 128,   1,   0,
+			 85, 128,   3,   0, 170, 160,
+			  6,   0,   0,   2,   1,   0,
+			  1, 128,   1,   0,  85, 128,
+			  5,   0,   0,   3,   0,   0,
+			  1, 128,   0,   0,   0, 128,
+			  1,   0,   0, 128,  15,   0,
+			  0,   2,   0,   0,   8, 128,
+			  0,   0, 255, 128,   6,   0,
+			  0,   2,   0,   0,   8, 128,
+			  0,   0, 255, 128,   5,   0,
+			  0,   3,   0,   0,   4, 128,
+			  0,   0, 255, 128,   0,   0,
+			170, 128,   2,   0,   0,   3,
+			  0,   0,   8, 128,   0,   0,
+			255, 161,   0,   0, 170, 160,
+			 88,   0,   0,   4,   0,   0,
+			  8, 128,   0,   0, 255, 128,
+			  3,   0,  85, 161,   3,   0,
+			170, 161,   1,   0,   0,   2,
+			  1,   0,   4, 128,   0,   0,
+			170, 160,   2,   0,   0,   3,
+			  1,   0,   1, 128,   1,   0,
+			170, 129,   3,   0,   0, 160,
+			 88,   0,   0,   4,   0,   0,
+			  8, 128,   1,   0,   0, 128,
+			  3,   0,  85, 160,   0,   0,
+			255, 128,  88,   0,   0,   4,
+			  0,   0,   2, 128,   0,   0,
+			255, 128,   0,   0, 170, 128,
+			  0,   0,  85, 128,   1,   0,
+			  0,   2,   0,   0,   8, 128,
+			  2,   0, 255, 160,   2,   0,
+			  0,   3,   0,   0,   4, 128,
+			  0,   0, 255, 128,   1,   0,
+			  0, 161,  88,   0,   0,   4,
+			  0,   0,   1, 128,   0,   0,
+			170, 128,   0,   0,   0, 128,
+			  0,   0,  85, 128,   1,   0,
+			  0,   2,   0,   0,  23, 128,
+			  0,   0,   0, 128,   1,   0,
+			  0,   2,   0,   0,   8, 128,
+			  3,   0, 170, 160,   1,   0,
+			  0,   2,   0,   8,  15, 128,
+			  0,   0, 228, 128, 255, 255,
+			  0,   0
+		};
+
+		static IDirect3DPixelShader9 *s_pPreviewShader = nullptr;
+		if ( !s_pPreviewShader )
+		{
+			pDevice->CreatePixelShader( reinterpret_cast<const DWORD *>( s_kPsDepthPreviewBytecode ), &s_pPreviewShader );
+		}
+		if ( !s_pPreviewShader )
+			return false;
+
+		IDirect3DStateBlock9 *savedState = nullptr;
+		if ( SUCCEEDED( pDevice->CreateStateBlock( D3DSBT_ALL, &savedState ) ) && savedState )
+		{
+			savedState->Capture();
+		}
+
+		pDevice->SetRenderState( D3DRS_ZENABLE, FALSE );
+		pDevice->SetRenderState( D3DRS_ZWRITEENABLE, FALSE );
+		pDevice->SetRenderState( D3DRS_FILLMODE, D3DFILL_SOLID );
+		pDevice->SetRenderState( D3DRS_ALPHATESTENABLE, FALSE );
+		pDevice->SetRenderState( D3DRS_CULLMODE, D3DCULL_NONE );
+		pDevice->SetRenderState( D3DRS_ALPHABLENDENABLE, FALSE );
+		pDevice->SetRenderState( D3DRS_FOGENABLE, FALSE );
+		pDevice->SetRenderState( D3DRS_STENCILENABLE, FALSE );
+		pDevice->SetRenderState( D3DRS_CLIPPING, FALSE );
+		pDevice->SetRenderState( D3DRS_LIGHTING, FALSE );
+		pDevice->SetRenderState( D3DRS_COLORWRITEENABLE, 0x0000000F );
+		pDevice->SetRenderState( D3DRS_SRGBWRITEENABLE, FALSE );
+
+		pDevice->SetTexture( 0, srcTexture );
+		pDevice->SetSamplerState( 0, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP );
+		pDevice->SetSamplerState( 0, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP );
+		pDevice->SetSamplerState( 0, D3DSAMP_MAGFILTER, D3DTEXF_POINT );
+		pDevice->SetSamplerState( 0, D3DSAMP_MINFILTER, D3DTEXF_POINT );
+		pDevice->SetSamplerState( 0, D3DSAMP_MIPFILTER, D3DTEXF_NONE );
+		pDevice->SetSamplerState( 0, D3DSAMP_SRGBTEXTURE, FALSE );
+
+		pDevice->SetVertexShader( nullptr );
+		pDevice->SetPixelShader( s_pPreviewShader );
+
+		const float nearPlane = ( zNear > 0.0f ) ? zNear : 3.0f;
+		const float farPlane = ( zFar > nearPlane ) ? zFar : 20000.0f;
+		const float startVal = depthStart;
+		const float endVal = ( depthEnd > depthStart ) ? depthEnd : ( depthStart + 1.0f );
+		const float isLog = ( depthCurve == ART_DEPTH_CURVE_LOGARITHMIC ) ? 1.0f : 0.0f;
+		const float rangeSpan = endVal - startVal;
+
+		const float c0[4] = { nearPlane, farPlane, startVal, endVal };
+		const float c1[4] = { isLog, rangeSpan, 0.0f, 0.0f };
+		pDevice->SetPixelShaderConstantF( 0, c0, 1 );
+		pDevice->SetPixelShaderConstantF( 1, c1, 1 );
+
+		D3DVIEWPORT9 vp = {};
+		vp.X = x;
+		vp.Y = y;
+		vp.Width = width;
+		vp.Height = height;
+		vp.MinZ = 0.0f;
+		vp.MaxZ = 1.0f;
+		pDevice->SetViewport( &vp );
+
+		struct VertexRHW
+		{
+			float x, y, z, rhw;
+			float u, v;
+		};
+
+		const float vx = static_cast<float>( x );
+		const float vy = static_cast<float>( y );
+		const float vw = static_cast<float>( width );
+		const float vh = static_cast<float>( height );
+
+		VertexRHW vertices[4] = {
+			{ vx - 0.5f,      vy - 0.5f,      0.0f, 1.0f, 0.0f, 0.0f },
+			{ vx + vw - 0.5f, vy - 0.5f,      0.0f, 1.0f, 1.0f, 0.0f },
+			{ vx - 0.5f,      vy + vh - 0.5f, 0.0f, 1.0f, 0.0f, 1.0f },
+			{ vx + vw - 0.5f, vy + vh - 0.5f, 0.0f, 1.0f, 1.0f, 1.0f }
+		};
+
+		pDevice->SetFVF( D3DFVF_XYZRHW | D3DFVF_TEX1 );
+		pDevice->DrawPrimitiveUP( D3DPT_TRIANGLESTRIP, 2, vertices, sizeof( VertexRHW ) );
+
+		pDevice->SetTexture( 0, nullptr );
+
+		if ( savedState )
+		{
+			savedState->Apply();
+			savedState->Release();
+		}
+
+		return true;
+	}
 }

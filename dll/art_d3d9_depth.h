@@ -90,6 +90,20 @@ namespace art
 		LONG depthCurve
 	);
 
+	// Direct GPU depth preview rendering onto active viewport
+	bool RenderPreciseDepthPreview(
+		IDirect3DDevice9 *pDevice,
+		int x,
+		int y,
+		int width,
+		int height,
+		float zNear,
+		float zFar,
+		float depthStart,
+		float depthEnd,
+		LONG depthCurve
+	);
+
 	// Multi-pass capture helper
 	bool CapturePreciseDepthPass( const CViewSetup &view, const char *pPassName );
 }

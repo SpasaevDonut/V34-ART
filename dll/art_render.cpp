@@ -358,13 +358,52 @@ class HidePlayersRenderScope
 			}
 			else if ( preview == ART_PREVIEW_DEPTH )
 			{
-				CViewSetup utilityView = view;
-				utilityView.m_bDoBloomAndToneMapping = false;
-				CConVarRestore vars;
-				ApplyDepth( vars );
-				ApplyHudSetting( vars, hudMask, passBit );
-				g_pMaterials->ClearColor4ub( 255, 255, 255, 255 );
-				g_pClient->RenderViewEx( utilityView, clearFlags, AddHudDrawFlag( 0, hudMask, passBit ) );
+				const LONG depthMode = InterlockedCompareExchange( &g_nArtDepthMode, 0, 0 );
+				if ( depthMode == ART_DEPTH_MODE_D3D9 && IsD3D9DepthCaptureReady() )
+				{
+					IDirect3DDevice9 *pDevice = GetArtGuiDevice();
+					if ( pDevice )
+					{
+						EnsureActiveDepthSurfaceIsIntz( pDevice );
+					}
+
+					CViewSetup utilityView = view;
+					utilityView.m_bDoBloomAndToneMapping = false;
+					CConVarRestore vars;
+					ApplyHudSetting( vars, hudMask, passBit );
+					g_pMaterials->ClearColor4ub( 0, 0, 0, 255 );
+					{
+						ArtScopedStageTiming renderTiming( ART_TIMING_RENDER );
+						g_pClient->RenderViewEx( utilityView, clearFlags, AddHudDrawFlag( 0, hudMask, passBit ) );
+					}
+
+					if ( pDevice )
+					{
+						const LONG depthCurve = InterlockedCompareExchange( &g_nArtDepthCurve, 0, 0 );
+						RenderPreciseDepthPreview(
+							pDevice,
+							view.x,
+							view.y,
+							view.width,
+							view.height,
+							view.zNear,
+							view.zFar,
+							art_depth_start.GetFloat(),
+							art_depth_end.GetFloat(),
+							depthCurve
+						);
+					}
+				}
+				else
+				{
+					CViewSetup utilityView = view;
+					utilityView.m_bDoBloomAndToneMapping = false;
+					CConVarRestore vars;
+					ApplyDepth( vars );
+					ApplyHudSetting( vars, hudMask, passBit );
+					g_pMaterials->ClearColor4ub( 255, 255, 255, 255 );
+					g_pClient->RenderViewEx( utilityView, clearFlags, AddHudDrawFlag( 0, hudMask, passBit ) );
+				}
 			}
 			else if ( preview == ART_PREVIEW_CLEAR_NOPLAYERS )
 			{
