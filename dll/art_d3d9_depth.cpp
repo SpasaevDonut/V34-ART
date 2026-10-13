@@ -377,6 +377,15 @@ namespace art
 					savedState->Capture();
 				}
 
+				// Direct3D 9 StateBlocks DO NOT capture or restore Render Target, Depth-Stencil surface, or Viewport.
+				// Save them explicitly so we can fully restore engine state before leaving CopyDepthBuffer.
+				IDirect3DSurface9 *savedRenderTarget = nullptr;
+				IDirect3DSurface9 *savedDepthStencil = nullptr;
+				D3DVIEWPORT9 savedViewport = {};
+				device->GetRenderTarget( 0, &savedRenderTarget );
+				device->GetDepthStencilSurface( &savedDepthStencil );
+				device->GetViewport( &savedViewport );
+
 				if ( _copyState )
 					_copyState->Apply();
 
@@ -421,6 +430,18 @@ namespace art
 					savedState->Apply();
 					savedState->Release();
 				}
+
+				// Restore the engine's original Render Target, Depth-Stencil surface, and Viewport.
+				// This unbinds _backupSurface as active RT before GetRenderTargetData is called
+				// and ensures Source Engine has its Depth-Stencil surface intact for subsequent Clear/draw calls.
+				device->SetRenderTarget( 0, savedRenderTarget );
+				device->SetDepthStencilSurface( savedDepthStencil );
+				device->SetViewport( &savedViewport );
+
+				if ( savedRenderTarget )
+					savedRenderTarget->Release();
+				if ( savedDepthStencil )
+					savedDepthStencil->Release();
 
 				srcTexture->Release();
 				return D3D_OK;
@@ -1063,6 +1084,9 @@ namespace art
 			savedState->Capture();
 		}
 
+		D3DVIEWPORT9 savedViewport = {};
+		pDevice->GetViewport( &savedViewport );
+
 		pDevice->SetRenderState( D3DRS_ZENABLE, FALSE );
 		pDevice->SetRenderState( D3DRS_ZWRITEENABLE, FALSE );
 		pDevice->SetRenderState( D3DRS_FILLMODE, D3DFILL_SOLID );
@@ -1136,6 +1160,8 @@ namespace art
 			savedState->Apply();
 			savedState->Release();
 		}
+
+		pDevice->SetViewport( &savedViewport );
 
 		return true;
 	}
