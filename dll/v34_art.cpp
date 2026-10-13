@@ -201,6 +201,11 @@ namespace art
 			return 0;
 		}
 	}
+	void __cdecl ArtPurecallHandler()
+	{
+		LogMessage( "FATAL: Pure virtual function call (_purecall) intercepted! Thread=%lu", GetCurrentThreadId() );
+		FlushLog();
+	}
 }
 
 BOOL WINAPI DllMain( HINSTANCE hInstance, DWORD reason, LPVOID reserved )
@@ -208,6 +213,7 @@ BOOL WINAPI DllMain( HINSTANCE hInstance, DWORD reason, LPVOID reserved )
 	using namespace art;
 	if ( reason == DLL_PROCESS_ATTACH )
 	{
+		_set_purecall_handler( ArtPurecallHandler );
 		g_hThisModule = hInstance;
 		InitializeLogging();
 		if ( kEnableDebugLoggingOnInjection )

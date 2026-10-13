@@ -152,7 +152,6 @@ namespace art
 		{
 		public:
 			D3D9DepthCopier() :
-				_copyState( nullptr ),
 				_pixelShader( nullptr ),
 				_backupTexture( nullptr ),
 				_backupSurface( nullptr ),
@@ -169,11 +168,6 @@ namespace art
 
 			void Reset()
 			{
-				if ( _copyState )
-				{
-					_copyState->Release();
-					_copyState = nullptr;
-				}
 				if ( _pixelShader )
 				{
 					_pixelShader->Release();
@@ -198,26 +192,161 @@ namespace art
 				_backupHeight = 0;
 			}
 
-			HRESULT InitCopyStateBlock( IDirect3DDevice9 *device )
+			HRESULT EnsureBuffers( IDirect3DDevice9 *device, uint32_t width, uint32_t height )
 			{
-				if ( _copyState )
+				if ( _backupTexture && _stagingSurface && _backupWidth == width && _backupHeight == height )
 					return D3D_OK;
-				if ( !device )
+
+				LogMessage( "D3D9 DEPTH: EnsureBuffers requested %ux%u (previous %ux%u)", width, height, _backupWidth, _backupHeight );
+				FlushLog();
+
+				if ( _stagingSurface )
+				{
+					_stagingSurface->Release();
+					_stagingSurface = nullptr;
+				}
+				if ( _backupSurface )
+				{
+					_backupSurface->Release();
+					_backupSurface = nullptr;
+				}
+				if ( _backupTexture )
+				{
+					_backupTexture->Release();
+					_backupTexture = nullptr;
+				}
+				_backupWidth = 0;
+				_backupHeight = 0;
+
+				HRESULT hr = device->CreateTexture(
+					width,
+					height,
+					1,
+					D3DUSAGE_RENDERTARGET,
+					D3DFMT_R32F,
+					D3DPOOL_DEFAULT,
+					&_backupTexture,
+					nullptr
+				);
+
+				if ( FAILED( hr ) || !_backupTexture )
+				{
+					LogMessage( "D3D9 DEPTH: CreateTexture R32F failed hr=0x%08lX, falling back to A8R8G8B8", hr );
+					FlushLog();
+					hr = device->CreateTexture(
+						width,
+						height,
+						1,
+						D3DUSAGE_RENDERTARGET,
+						D3DFMT_A8R8G8B8,
+						D3DPOOL_DEFAULT,
+						&_backupTexture,
+						nullptr
+					);
+				}
+
+				if ( FAILED( hr ) || !_backupTexture )
+				{
+					LogMessage( "D3D9 DEPTH: CreateTexture failed hr=0x%08lX", hr );
+					FlushLog();
+					return hr;
+				}
+
+				hr = _backupTexture->GetSurfaceLevel( 0, &_backupSurface );
+				if ( FAILED( hr ) || !_backupSurface )
+				{
+					LogMessage( "D3D9 DEPTH: GetSurfaceLevel failed hr=0x%08lX", hr );
+					FlushLog();
+					return hr;
+				}
+
+				D3DSURFACE_DESC desc = {};
+				_backupSurface->GetDesc( &desc );
+				hr = device->CreateOffscreenPlainSurface(
+					width,
+					height,
+					desc.Format,
+					D3DPOOL_SYSTEMMEM,
+					&_stagingSurface,
+					nullptr
+				);
+				if ( FAILED( hr ) || !_stagingSurface )
+				{
+					LogMessage( "D3D9 DEPTH: CreateOffscreenPlainSurface failed hr=0x%08lX format=%d", hr, desc.Format );
+					FlushLog();
+					return hr;
+				}
+
+				_backupWidth = width;
+				_backupHeight = height;
+				LogMessage( "D3D9 DEPTH: EnsureBuffers succeeded %ux%u format=%d", width, height, desc.Format );
+				FlushLog();
+				return D3D_OK;
+			}
+
+			HRESULT CopyDepthBuffer( IDirect3DDevice9 *device, IDirect3DSurface9 *srcDepthSurface, uint32_t width, uint32_t height )
+			{
+				if ( !device || width == 0 || height == 0 )
 					return D3DERR_INVALIDCALL;
+
+				LogMessage( "D3D9 DEPTH: CopyDepthBuffer begin %ux%u", width, height );
+				FlushLog();
+
+				HRESULT hr = EnsureBuffers( device, width, height );
+				if ( FAILED( hr ) )
+				{
+					LogMessage( "D3D9 DEPTH: EnsureBuffers failed hr=0x%08lX", hr );
+					FlushLog();
+					return hr;
+				}
+
+				IDirect3DTexture9 *srcTexture = g_pMainIntzTexture;
+				bool releaseSrcTexture = false;
+				if ( !srcTexture && srcDepthSurface )
+				{
+					hr = srcDepthSurface->GetContainer( IID_PPV_ARGS( &srcTexture ) );
+					if ( SUCCEEDED( hr ) && srcTexture )
+					{
+						releaseSrcTexture = true;
+					}
+					else
+					{
+						srcTexture = nullptr;
+					}
+				}
+				if ( !srcTexture )
+				{
+					LogMessage( "D3D9 DEPTH: CopyDepthBuffer could not obtain source INTZ texture" );
+					FlushLog();
+					return D3DERR_INVALIDCALL;
+				}
 
 				if ( !_pixelShader )
 				{
-					device->CreatePixelShader( kPsCopyDepthBytecode, &_pixelShader );
+					hr = device->CreatePixelShader( kPsCopyDepthBytecode, &_pixelShader );
+					if ( FAILED( hr ) || !_pixelShader )
+					{
+						LogMessage( "D3D9 DEPTH: CreatePixelShader failed hr=0x%08lX", hr );
+						FlushLog();
+						if ( releaseSrcTexture && srcTexture ) srcTexture->Release();
+						return hr;
+					}
 				}
 
-				HRESULT hr = device->BeginStateBlock();
-				if ( FAILED( hr ) )
-					return hr;
+				IDirect3DStateBlock9 *savedState = nullptr;
+				if ( SUCCEEDED( device->CreateStateBlock( D3DSBT_ALL, &savedState ) ) && savedState )
+				{
+					savedState->Capture();
+				}
 
-				if ( _pixelShader )
-					device->SetPixelShader( _pixelShader );
-				else
-					device->SetPixelShader( nullptr );
+				IDirect3DSurface9 *savedRenderTarget = nullptr;
+				IDirect3DSurface9 *savedDepthStencil = nullptr;
+				D3DVIEWPORT9 savedViewport = {};
+				device->GetRenderTarget( 0, &savedRenderTarget );
+				device->GetDepthStencilSurface( &savedDepthStencil );
+				device->GetViewport( &savedViewport );
+
+				device->SetPixelShader( _pixelShader );
 				device->SetVertexShader( nullptr );
 
 				device->SetRenderState( D3DRS_ZENABLE, FALSE );
@@ -253,147 +382,12 @@ namespace art
 				device->SetSamplerState( 0, D3DSAMP_MIPFILTER, D3DTEXF_NONE );
 				device->SetSamplerState( 0, D3DSAMP_SRGBTEXTURE, FALSE );
 
-				const D3DMATRIX identityMatrix = {
-					1.0f, 0.0f, 0.0f, 0.0f,
-					0.0f, 1.0f, 0.0f, 0.0f,
-					0.0f, 0.0f, 1.0f, 0.0f,
-					0.0f, 0.0f, 0.0f, 1.0f
-				};
-				device->SetTransform( D3DTS_VIEW, &identityMatrix );
-				device->SetTransform( D3DTS_PROJECTION, &identityMatrix );
-				device->SetTransform( D3DTS_WORLD, &identityMatrix );
-
-				// Source Engine water clip plane reset
-				const float zeroClipPlane[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
-				device->SetClipPlane( 0, zeroClipPlane );
-
 				for ( DWORD i = 1; i < 8; ++i )
 					device->SetTexture( i, nullptr );
-
-				return device->EndStateBlock( &_copyState );
-			}
-
-			HRESULT EnsureBuffers( IDirect3DDevice9 *device, uint32_t width, uint32_t height )
-			{
-				if ( _backupTexture && _stagingSurface && _backupWidth == width && _backupHeight == height )
-					return D3D_OK;
-
-				if ( _stagingSurface )
-				{
-					_stagingSurface->Release();
-					_stagingSurface = nullptr;
-				}
-				if ( _backupSurface )
-				{
-					_backupSurface->Release();
-					_backupSurface = nullptr;
-				}
-				if ( _backupTexture )
-				{
-					_backupTexture->Release();
-					_backupTexture = nullptr;
-				}
-
-				HRESULT hr = device->CreateTexture(
-					width,
-					height,
-					1,
-					D3DUSAGE_RENDERTARGET,
-					D3DFMT_R32F,
-					D3DPOOL_DEFAULT,
-					&_backupTexture,
-					nullptr
-				);
-
-				if ( FAILED( hr ) || !_backupTexture )
-				{
-					// Fallback to A8R8G8B8 if R32F render target is unsupported
-					hr = device->CreateTexture(
-						width,
-						height,
-						1,
-						D3DUSAGE_RENDERTARGET,
-						D3DFMT_A8R8G8B8,
-						D3DPOOL_DEFAULT,
-						&_backupTexture,
-						nullptr
-					);
-				}
-
-				if ( SUCCEEDED( hr ) && _backupTexture )
-				{
-					_backupWidth = width;
-					_backupHeight = height;
-					hr = _backupTexture->GetSurfaceLevel( 0, &_backupSurface );
-
-					if ( SUCCEEDED( hr ) && _backupSurface )
-					{
-						D3DSURFACE_DESC desc = {};
-						_backupSurface->GetDesc( &desc );
-						hr = device->CreateOffscreenPlainSurface(
-							width,
-							height,
-							desc.Format,
-							D3DPOOL_SYSTEMMEM,
-							&_stagingSurface,
-							nullptr
-						);
-					}
-				}
-
-				return hr;
-			}
-
-			HRESULT CopyDepthBuffer( IDirect3DDevice9 *device, IDirect3DSurface9 *srcDepthSurface, uint32_t width, uint32_t height )
-			{
-				if ( !device || width == 0 || height == 0 )
-					return D3DERR_INVALIDCALL;
-
-				HRESULT hr = EnsureBuffers( device, width, height );
-				if ( FAILED( hr ) )
-					return hr;
-
-				IDirect3DTexture9 *srcTexture = nullptr;
-				if ( srcDepthSurface )
-				{
-					srcDepthSurface->GetContainer( IID_PPV_ARGS( &srcTexture ) );
-				}
-				if ( !srcTexture && g_pMainIntzTexture )
-				{
-					srcTexture = g_pMainIntzTexture;
-					srcTexture->AddRef();
-				}
-				if ( !srcTexture )
-				{
-					LogMessage( "D3D9 DEPTH: CopyDepthBuffer could not obtain source INTZ texture" );
-					return D3DERR_INVALIDCALL;
-				}
-
-				InitCopyStateBlock( device );
-
-				IDirect3DStateBlock9 *savedState = nullptr;
-				if ( SUCCEEDED( device->CreateStateBlock( D3DSBT_ALL, &savedState ) ) && savedState )
-				{
-					savedState->Capture();
-				}
-
-				// Direct3D 9 StateBlocks DO NOT capture or restore Render Target, Depth-Stencil surface, or Viewport.
-				// Save them explicitly so we can fully restore engine state before leaving CopyDepthBuffer.
-				IDirect3DSurface9 *savedRenderTarget = nullptr;
-				IDirect3DSurface9 *savedDepthStencil = nullptr;
-				D3DVIEWPORT9 savedViewport = {};
-				device->GetRenderTarget( 0, &savedRenderTarget );
-				device->GetDepthStencilSurface( &savedDepthStencil );
-				device->GetViewport( &savedViewport );
-
-				if ( _copyState )
-					_copyState->Apply();
 
 				device->SetRenderTarget( 0, _backupSurface );
 				device->SetDepthStencilSurface( nullptr );
 				device->SetTexture( 0, srcTexture );
-				if ( _pixelShader )
-					device->SetPixelShader( _pixelShader );
 
 				D3DVIEWPORT9 vp = {};
 				vp.X = 0;
@@ -431,19 +425,23 @@ namespace art
 					savedState->Release();
 				}
 
-				// Restore the engine's original Render Target, Depth-Stencil surface, and Viewport.
-				// This unbinds _backupSurface as active RT before GetRenderTargetData is called
-				// and ensures Source Engine has its Depth-Stencil surface intact for subsequent Clear/draw calls.
-				device->SetRenderTarget( 0, savedRenderTarget );
-				device->SetDepthStencilSurface( savedDepthStencil );
+				if ( savedRenderTarget )
+				{
+					device->SetRenderTarget( 0, savedRenderTarget );
+					savedRenderTarget->Release();
+				}
+				if ( savedDepthStencil )
+				{
+					device->SetDepthStencilSurface( savedDepthStencil );
+					savedDepthStencil->Release();
+				}
 				device->SetViewport( &savedViewport );
 
-				if ( savedRenderTarget )
-					savedRenderTarget->Release();
-				if ( savedDepthStencil )
-					savedDepthStencil->Release();
+				if ( releaseSrcTexture && srcTexture )
+					srcTexture->Release();
 
-				srcTexture->Release();
+				LogMessage( "D3D9 DEPTH: CopyDepthBuffer end success" );
+				FlushLog();
 				return D3D_OK;
 			}
 
@@ -453,7 +451,6 @@ namespace art
 			uint32_t GetHeight() const { return _backupHeight; }
 
 		private:
-			IDirect3DStateBlock9 *_copyState;
 			IDirect3DPixelShader9 *_pixelShader;
 			IDirect3DTexture9 *_backupTexture;
 			IDirect3DSurface9 *_backupSurface;
@@ -631,26 +628,41 @@ namespace art
 		IDirect3DSurface9 *pBackup = g_DepthCopier.GetBackupSurface();
 		IDirect3DSurface9 *pStaging = g_DepthCopier.GetStagingSurface();
 		if ( !pBackup || !pStaging )
+		{
+			LogMessage( "D3D9 DEPTH: ReadPreciseDepthPixels null surface backup=%p staging=%p", pBackup, pStaging );
+			FlushLog();
 			return false;
+		}
+
+		LogMessage( "D3D9 DEPTH: GetRenderTargetData begin backup=%p staging=%p", pBackup, pStaging );
+		FlushLog();
 
 		HRESULT hr = pDevice->GetRenderTargetData( pBackup, pStaging );
 		if ( FAILED( hr ) )
 		{
 			LogMessage( "D3D9 DEPTH: GetRenderTargetData failed hr=0x%08lX", hr );
+			FlushLog();
 			return false;
 		}
+
+		LogMessage( "D3D9 DEPTH: LockRect begin" );
+		FlushLog();
 
 		D3DLOCKED_RECT locked = {};
 		hr = pStaging->LockRect( &locked, nullptr, D3DLOCK_READONLY );
 		if ( FAILED( hr ) || !locked.pBits )
 		{
-			LogMessage( "D3D9 DEPTH: LockRect failed hr=0x%08lX", hr );
+			LogMessage( "D3D9 DEPTH: LockRect failed hr=0x%08lX bits=%p", hr, locked.pBits );
+			FlushLog();
 			return false;
 		}
 
 		D3DSURFACE_DESC desc = {};
 		pStaging->GetDesc( &desc );
 		const bool isFloat = ( desc.Format == D3DFMT_R32F );
+
+		LogMessage( "D3D9 DEPTH: LockRect succeeded pitch=%d isFloat=%d", locked.Pitch, isFloat ? 1 : 0 );
+		FlushLog();
 
 		const float nearPlane = ( zNear > 0.0f ) ? zNear : 3.0f;
 		const float farPlane = ( zFar > nearPlane ) ? zFar : 20000.0f;
@@ -734,6 +746,8 @@ namespace art
 		}
 
 		pStaging->UnlockRect();
+		LogMessage( "D3D9 DEPTH: UnlockRect succeeded" );
+		FlushLog();
 		return true;
 	}
 
@@ -744,20 +758,33 @@ namespace art
 
 		IDirect3DDevice9 *pDevice = GetArtGuiDevice();
 		if ( !pDevice )
+		{
+			LogMessage( "PRECISE DEPTH: GetArtGuiDevice returned null" );
+			FlushLog();
 			return false;
+		}
 
+		LogMessage( "PRECISE DEPTH: EnsureActiveDepthSurfaceIsIntz..." );
+		FlushLog();
 		EnsureActiveDepthSurfaceIsIntz( pDevice );
 
 		IDirect3DSurface9 *pActiveDepth = nullptr;
 		HRESULT hr = pDevice->GetDepthStencilSurface( &pActiveDepth );
 		if ( FAILED( hr ) || !pActiveDepth )
+		{
+			LogMessage( "PRECISE DEPTH: GetDepthStencilSurface failed hr=0x%08lX", hr );
+			FlushLog();
 			return false;
+		}
 
+		LogMessage( "PRECISE DEPTH: Calling CopyDepthBuffer activeDepth=%p...", pActiveDepth );
+		FlushLog();
 		hr = g_DepthCopier.CopyDepthBuffer( pDevice, pActiveDepth, view.width, view.height );
 		pActiveDepth->Release();
 		if ( FAILED( hr ) )
 		{
 			LogMessage( "PRECISE DEPTH: CopyDepthBuffer failed hr=0x%08lX", hr );
+			FlushLog();
 			return false;
 		}
 
@@ -776,9 +803,15 @@ namespace art
 		unsigned char *pPixels = static_cast<unsigned char *>(
 			AllocateArtCaptureMemory( pixelBufferBytes, "precise depth frame readback" ) );
 		if ( !pPixels )
+		{
+			LogMessage( "PRECISE DEPTH: AllocateArtCaptureMemory failed" );
+			FlushLog();
 			return false;
+		}
 
 		const LONG depthCurve = InterlockedCompareExchange( &g_nArtDepthCurve, 0, 0 );
+		LogMessage( "PRECISE DEPTH: Calling ReadPreciseDepthPixels..." );
+		FlushLog();
 		const unsigned __int64 readTiming = BeginArtStageTiming();
 		const bool readOk = ReadPreciseDepthPixels(
 			pDevice,
@@ -799,6 +832,7 @@ namespace art
 		{
 			free( pPixels );
 			LogMessage( "PRECISE DEPTH: read pixels failed for frame=%d", g_nFrame );
+			FlushLog();
 			return false;
 		}
 
