@@ -253,15 +253,15 @@ namespace
 			  showHlaeInputHelp( false ), resetInfoScroll( false ),
 			  globalFov( 90.0f ), globalFovDefault( true )
 		{
-			accentColor[0] = 209.0f / 255.0f; accentColor[1] = 114.0f / 255.0f; accentColor[2] = 71.0f / 255.0f; accentColor[3] = 1.00f;
-			windowColor[0] = 14.0f / 255.0f; windowColor[1] = 10.0f / 255.0f; windowColor[2] = 9.0f / 255.0f; windowColor[3] = 200.0f / 255.0f;
-			panelColor[0] = 20.0f / 255.0f; panelColor[1] = 15.0f / 255.0f; panelColor[2] = 13.0f / 255.0f; panelColor[3] = 150.0f / 255.0f;
-			sidebarColor[0] = 10.0f / 255.0f; sidebarColor[1] = 8.0f / 255.0f; sidebarColor[2] = 6.0f / 255.0f; sidebarColor[3] = 235.0f / 255.0f;
-			textColor[0] = 235.0f / 255.0f; textColor[1] = 237.0f / 255.0f; textColor[2] = 247.0f / 255.0f; textColor[3] = 1.00f;
-			mutedTextColor[0] = 143.0f / 255.0f; mutedTextColor[1] = 150.0f / 255.0f; mutedTextColor[2] = 173.0f / 255.0f; mutedTextColor[3] = 1.00f;
-			borderColor[0] = 88.0f / 255.0f; borderColor[1] = 52.0f / 255.0f; borderColor[2] = 35.0f / 255.0f; borderColor[3] = 217.0f / 255.0f;
-			controlColor[0] = 34.0f / 255.0f; controlColor[1] = 27.0f / 255.0f; controlColor[2] = 23.0f / 255.0f; controlColor[3] = 245.0f / 255.0f;
-			selectionColor[0] = 181.0f / 255.0f; selectionColor[1] = 34.0f / 255.0f; selectionColor[2] = 0.0f; selectionColor[3] = 235.0f / 255.0f;
+			accentColor[0] = 91.0f / 255.0f; accentColor[1] = 91.0f / 255.0f; accentColor[2] = 254.0f / 255.0f; accentColor[3] = 1.00f;
+			windowColor[0] = 22.0f / 255.0f; windowColor[1] = 22.0f / 255.0f; windowColor[2] = 22.0f / 255.0f; windowColor[3] = 1.00f;
+			panelColor[0] = 22.0f / 255.0f; panelColor[1] = 22.0f / 255.0f; panelColor[2] = 22.0f / 255.0f; panelColor[3] = 1.00f;
+			sidebarColor[0] = 20.0f / 255.0f; sidebarColor[1] = 20.0f / 255.0f; sidebarColor[2] = 20.0f / 255.0f; sidebarColor[3] = 1.00f;
+			textColor[0] = 217.0f / 255.0f; textColor[1] = 217.0f / 255.0f; textColor[2] = 217.0f / 255.0f; textColor[3] = 1.00f;
+			mutedTextColor[0] = 115.0f / 255.0f; mutedTextColor[1] = 115.0f / 255.0f; mutedTextColor[2] = 115.0f / 255.0f; mutedTextColor[3] = 1.00f;
+			borderColor[0] = 52.0f / 255.0f; borderColor[1] = 52.0f / 255.0f; borderColor[2] = 52.0f / 255.0f; borderColor[3] = 1.00f;
+			controlColor[0] = 36.0f / 255.0f; controlColor[1] = 36.0f / 255.0f; controlColor[2] = 36.0f / 255.0f; controlColor[3] = 1.00f;
+			selectionColor[0] = 91.0f / 255.0f; selectionColor[1] = 91.0f / 255.0f; selectionColor[2] = 254.0f / 255.0f; selectionColor[3] = 1.00f;
 			takeName[0] = '\0';
 			demoName[0] = '\0';
 			demoTick = 0;
@@ -982,10 +982,23 @@ namespace
 		SetColor( g_Gui.mutedTextColor, 0.56f, 0.59f, 0.68f, 1.0f );
 		SetColor( g_Gui.controlColor, 0.090f, 0.095f, 0.135f, 0.96f );
 
-		if ( !Q_stricmp( pName, "purple" ) )
+		if ( !Q_stricmp( pName, "onetap" ) )
+		{
+			SetColor( g_Gui.accentColor, 91.0f / 255.0f, 91.0f / 255.0f, 254.0f / 255.0f, 1.0f );
+			SetColor( g_Gui.windowColor, 22.0f / 255.0f, 22.0f / 255.0f, 22.0f / 255.0f, 1.0f );
+			SetColor( g_Gui.panelColor, 22.0f / 255.0f, 22.0f / 255.0f, 22.0f / 255.0f, 1.0f );
+			SetColor( g_Gui.sidebarColor, 20.0f / 255.0f, 20.0f / 255.0f, 20.0f / 255.0f, 1.0f );
+			SetColor( g_Gui.textColor, 217.0f / 255.0f, 217.0f / 255.0f, 217.0f / 255.0f, 1.0f );
+			SetColor( g_Gui.mutedTextColor, 115.0f / 255.0f, 115.0f / 255.0f, 115.0f / 255.0f, 1.0f );
+			SetColor( g_Gui.borderColor, 52.0f / 255.0f, 52.0f / 255.0f, 52.0f / 255.0f, 1.0f );
+			SetColor( g_Gui.controlColor, 36.0f / 255.0f, 36.0f / 255.0f, 36.0f / 255.0f, 1.0f );
+			SetColor( g_Gui.selectionColor, 91.0f / 255.0f, 91.0f / 255.0f, 254.0f / 255.0f, 1.0f );
+			return true;
+		}
+		else if ( !Q_stricmp( pName, "purple" ) )
 			SetColor( g_Gui.accentColor, 0.50f, 0.28f, 0.82f, 1.0f );
 		else if ( !Q_stricmp( pName, "blue" ) )
-			SetColor( g_Gui.accentColor, 0.16f, 0.48f, 0.92f, 1.0f );
+			SetColor( g_Gui.accentColor, 91.0f / 255.0f, 91.0f / 255.0f, 254.0f / 255.0f, 1.0f );
 		else if ( !Q_stricmp( pName, "green" ) )
 			SetColor( g_Gui.accentColor, 0.14f, 0.68f, 0.42f, 1.0f );
 		else if ( !Q_stricmp( pName, "orange" ) || !Q_stricmp( pName, "default" ) )
@@ -2670,40 +2683,41 @@ namespace
 		const ImVec4 border = GuiColor( g_Gui.borderColor );
 		const ImVec4 control = GuiColor( g_Gui.controlColor );
 		const ImVec4 selection = GuiColor( g_Gui.selectionColor );
-		const ImVec4 brightAccent = MixColor( accent, text, 0.22f );
+		const ImVec4 brightAccent = MixColor( accent, ImVec4( 1.0f, 1.0f, 1.0f, 1.0f ), 0.20f );
 
 		colors[ImGuiCol_Text] = text;
 		colors[ImGuiCol_TextDisabled] = muted;
 		colors[ImGuiCol_WindowBg] = window;
 		colors[ImGuiCol_ChildBg] = panel;
-		colors[ImGuiCol_PopupBg] = MixColor( window, panel, 0.55f );
+		colors[ImGuiCol_PopupBg] = ImVec4( 0.09f, 0.09f, 0.09f, 0.98f );
 		colors[ImGuiCol_Border] = border;
 		colors[ImGuiCol_BorderShadow] = ImVec4( 0, 0, 0, 0 );
 		colors[ImGuiCol_FrameBg] = control;
-		colors[ImGuiCol_FrameBgHovered] = MixColor( control, accent, 0.48f );
-		colors[ImGuiCol_FrameBgActive] = MixColor( control, accent, 0.70f );
+		colors[ImGuiCol_FrameBgHovered] = ImVec4( 0.18f, 0.18f, 0.18f, 1.0f );
+		colors[ImGuiCol_FrameBgActive] = ImVec4( 0.22f, 0.22f, 0.22f, 1.0f );
 		colors[ImGuiCol_TitleBg] = window;
-		colors[ImGuiCol_TitleBgActive] = MixColor( window, accent, 0.16f );
-		colors[ImGuiCol_MenuBarBg] = GuiColor( g_Gui.sidebarColor );
+		colors[ImGuiCol_TitleBgActive] = window;
+		colors[ImGuiCol_TitleBgCollapsed] = window;
+		colors[ImGuiCol_MenuBarBg] = window;
 		colors[ImGuiCol_Button] = control;
-		colors[ImGuiCol_ButtonHovered] = MixColor( control, accent, 0.62f );
-		colors[ImGuiCol_ButtonActive] = selection;
-		colors[ImGuiCol_Header] = selection;
-		colors[ImGuiCol_HeaderHovered] = MixColor( selection, accent, 0.48f );
+		colors[ImGuiCol_ButtonHovered] = ImVec4( 0.18f, 0.18f, 0.18f, 1.0f );
+		colors[ImGuiCol_ButtonActive] = accent;
+		colors[ImGuiCol_Header] = ImVec4( 0.15f, 0.15f, 0.15f, 1.0f );
+		colors[ImGuiCol_HeaderHovered] = ImVec4( 0.20f, 0.20f, 0.20f, 1.0f );
 		colors[ImGuiCol_HeaderActive] = accent;
-		colors[ImGuiCol_CheckMark] = brightAccent;
+		colors[ImGuiCol_CheckMark] = accent;
 		colors[ImGuiCol_SliderGrab] = accent;
 		colors[ImGuiCol_SliderGrabActive] = brightAccent;
 		colors[ImGuiCol_Separator] = border;
 		colors[ImGuiCol_SeparatorHovered] = accent;
 		colors[ImGuiCol_SeparatorActive] = brightAccent;
-		colors[ImGuiCol_ScrollbarBg] = MixColor( window, control, 0.50f );
-		colors[ImGuiCol_ScrollbarGrab] = MixColor( control, muted, 0.30f );
-		colors[ImGuiCol_ScrollbarGrabHovered] = MixColor( control, accent, 0.48f );
+		colors[ImGuiCol_ScrollbarBg] = ImVec4( 0.08f, 0.08f, 0.08f, 0.6f );
+		colors[ImGuiCol_ScrollbarGrab] = ImVec4( 0.20f, 0.20f, 0.20f, 1.0f );
+		colors[ImGuiCol_ScrollbarGrabHovered] = ImVec4( 0.28f, 0.28f, 0.28f, 1.0f );
 		colors[ImGuiCol_ScrollbarGrabActive] = accent;
-		colors[ImGuiCol_TableHeaderBg] = selection;
+		colors[ImGuiCol_TableHeaderBg] = ImVec4( 0.12f, 0.12f, 0.12f, 1.0f );
 		colors[ImGuiCol_TableBorderStrong] = border;
-		colors[ImGuiCol_TableBorderLight] = MixColor( panel, border, 0.65f );
+		colors[ImGuiCol_TableBorderLight] = ImVec4( 0.16f, 0.16f, 0.16f, 1.0f );
 		colors[ImGuiCol_TextSelectedBg] = ImVec4( accent.x, accent.y, accent.z, 0.35f );
 		colors[ImGuiCol_NavHighlight] = brightAccent;
 		colors[ImGuiCol_ResizeGrip] = ImVec4( accent.x, accent.y, accent.z, 0.30f );
@@ -2714,24 +2728,25 @@ namespace
 	void ApplyStyle()
 	{
 		ImGuiStyle &style = ImGui::GetStyle();
-		style.WindowRounding = 13.0f;
-		style.ChildRounding = 10.0f;
-		style.FrameRounding = 7.0f;
-		style.PopupRounding = 9.0f;
-		style.ScrollbarRounding = 10.0f;
-		style.GrabRounding = 7.0f;
-		style.TabRounding = 7.0f;
-		style.WindowPadding = ImVec2( 14.0f, 14.0f );
-		style.FramePadding = ImVec2( 10.0f, 7.0f );
-		style.ItemSpacing = ImVec2( 9.0f, 8.0f );
-		style.ItemInnerSpacing = ImVec2( 8.0f, 6.0f );
-		style.CellPadding = ImVec2( 9.0f, 7.0f );
-		style.IndentSpacing = 20.0f;
-		style.ScrollbarSize = 14.0f;
-		style.GrabMinSize = 11.0f;
+		style.WindowRounding = 0.0f;
+		style.ChildRounding = 0.0f;
+		style.FrameRounding = 0.0f;
+		style.PopupRounding = 0.0f;
+		style.ScrollbarRounding = 0.0f;
+		style.GrabRounding = 0.0f;
+		style.TabRounding = 0.0f;
+		style.WindowPadding = ImVec2( 10.0f, 10.0f );
+		style.FramePadding = ImVec2( 6.0f, 4.0f );
+		style.ItemSpacing = ImVec2( 8.0f, 6.0f );
+		style.ItemInnerSpacing = ImVec2( 6.0f, 4.0f );
+		style.CellPadding = ImVec2( 6.0f, 4.0f );
+		style.IndentSpacing = 16.0f;
+		style.ScrollbarSize = 9.0f;
+		style.GrabMinSize = 8.0f;
 		style.WindowBorderSize = 1.0f;
 		style.ChildBorderSize = 1.0f;
-		style.FrameBorderSize = 0.0f;
+		style.FrameBorderSize = 1.0f;
+		style.PopupBorderSize = 1.0f;
 		ApplyThemeColors();
 	}
 
@@ -5991,6 +6006,8 @@ namespace
 		ImGui::BeginChild( "theme_settings", ImVec2( 0, 0 ), ImGuiChildFlags_Borders );
 		TextUnformattedWrapped( "Appearance" );
 		TextDisabledWrapped( "Presets" );
+		if ( ImGui::Button( "OneTap" ) ) ApplyThemePreset( "onetap" );
+		ImGui::SameLine();
 		if ( ImGui::Button( "Purple" ) ) ApplyThemePreset( "purple" );
 		ImGui::SameLine();
 		if ( ImGui::Button( "Blue" ) ) ApplyThemePreset( "blue" );
@@ -6245,7 +6262,7 @@ namespace
 
 		bool open = true;
 		ImGui::SetNextWindowSizeConstraints( ImVec2( 900, 620 ), ImVec2( FLT_MAX, FLT_MAX ) );
-		if ( !ImGui::Begin( V34_ART_PRODUCT_NAME " V" V34_ART_VERSION_STRING, &open, ImGuiWindowFlags_NoCollapse ) )
+		if ( !ImGui::Begin( V34_ART_PRODUCT_NAME " V" V34_ART_VERSION_STRING, &open, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar ) )
 		{
 			ImGui::End();
 			if ( !open ) SetArtGuiVisible( false );
@@ -6259,34 +6276,111 @@ namespace
 		g_Gui.mainWindowWidth = mainWindowSize.x;
 		g_Gui.mainWindowHeight = mainWindowSize.y;
 
-		const bool recording = InterlockedCompareExchange( &g_bRecording, FALSE, FALSE ) != FALSE;
-		ImGui::SetCursorPosX( ImGui::GetWindowWidth() - 180 );
-		StatusBadge( recording, "REC", "READY" );
-		ImGui::SameLine();
-		TextDisabledWrapped( "#%04d", g_nFrame );
-		ImGui::Separator();
+		ImDrawList *pDrawList = ImGui::GetWindowDrawList();
+		const ImVec2 p0 = mainWindowPosition;
+		const ImVec2 p1 = ImVec2( p0.x + mainWindowSize.x, p0.y + mainWindowSize.y );
 
-		const float sidebarWidth = 174.0f;
-		ImGui::PushStyleColor( ImGuiCol_ChildBg, GuiColor( g_Gui.sidebarColor ) );
-		ImGui::BeginChild( "sidebar", ImVec2( sidebarWidth, 0 ), ImGuiChildFlags_Borders );
+		// OneTap layered outer borders (triple border effect from reference image)
+		// 1. Outermost 1px border:
+		pDrawList->AddRect( p0, p1, IM_COL32( 58, 58, 58, 255 ), 0.0f, 0, 1.0f );
+		// 2. Middle 1px border (3px gap):
+		pDrawList->AddRect( ImVec2( p0.x + 3.0f, p0.y + 3.0f ), ImVec2( p1.x - 3.0f, p1.y - 3.0f ), IM_COL32( 36, 36, 36, 255 ), 0.0f, 0, 1.0f );
+		// 3. Inner 1px border (6px gap):
+		pDrawList->AddRect( ImVec2( p0.x + 6.0f, p0.y + 6.0f ), ImVec2( p1.x - 6.0f, p1.y - 6.0f ), IM_COL32( 48, 48, 48, 255 ), 0.0f, 0, 1.0f );
+
+		// Horizontal text tabs across the top
 		static const char *pages[] = { "Capture", "Passes", "Visuals", "Output", "Info", "HLAE", "Configs", "Console", "Settings" };
-		for ( int i = 0; i < ARRAYSIZE( pages ); ++i )
+		const int pageCount = ARRAYSIZE( pages );
+
+		const float tabAreaStartX = p0.x + 12.0f;
+		const float headerTopY = p0.y + 10.0f;
+		const float tabHeight = 32.0f;
+		const float tabBottomY = headerTopY + tabHeight;
+
+		// Calculate available width for tabs
+		const float rightControlsWidth = 270.0f;
+		const float totalInnerWidth = mainWindowSize.x - 24.0f;
+		const float availableTabWidth = totalInnerWidth - rightControlsWidth;
+		const float tabWidth = ( availableTabWidth > ( pageCount * 65.0f ) ) ?
+			( availableTabWidth / static_cast<float>( pageCount ) ) : 68.0f;
+
+		const ImVec4 accentColorVec = GuiColor( g_Gui.accentColor );
+		const ImU32 accentColU32 = ImGui::ColorConvertFloat4ToU32( accentColorVec );
+
+		ImGui::SetCursorScreenPos( ImVec2( tabAreaStartX, headerTopY ) );
+		for ( int i = 0; i < pageCount; ++i )
 		{
-			if ( ImGui::Selectable( pages[i], g_Gui.selectedPage == i, 0, ImVec2( 0, 38 ) ) )
+			const ImVec2 tabItemPos = ImGui::GetCursorScreenPos();
+			const bool isSelected = ( g_Gui.selectedPage == i );
+
+			char tabButtonId[32];
+			Q_snprintf( tabButtonId, sizeof( tabButtonId ), "##ot_tab_%d", i );
+			const bool clicked = ImGui::InvisibleButton( tabButtonId, ImVec2( tabWidth, tabHeight ) );
+			const bool hovered = ImGui::IsItemHovered();
+
+			if ( clicked )
 			{
 				g_Gui.selectedPage = i;
 				if ( i == 4 )
 					g_Gui.resetInfoScroll = true;
 			}
+
+			// Render tab text centered
+			const ImVec2 textSize = ImGui::CalcTextSize( pages[i] );
+			const ImVec2 textPos = ImVec2(
+				tabItemPos.x + ( tabWidth - textSize.x ) * 0.5f,
+				tabItemPos.y + ( tabHeight - textSize.y ) * 0.5f - 2.0f
+			);
+
+			const ImU32 textColor = isSelected ? IM_COL32( 255, 255, 255, 255 ) :
+				( hovered ? IM_COL32( 205, 205, 205, 255 ) : IM_COL32( 125, 125, 125, 255 ) );
+
+			pDrawList->AddText( textPos, textColor, pages[i] );
+
+			// Active tab blue accent line (height ~3px, sits directly on top of the bottom separator line)
+			if ( isSelected )
+			{
+				pDrawList->AddRectFilled(
+					ImVec2( tabItemPos.x + 2.0f, tabBottomY - 2.0f ),
+					ImVec2( tabItemPos.x + tabWidth - 2.0f, tabBottomY + 1.0f ),
+					accentColU32
+				);
+			}
+
+			if ( i < pageCount - 1 )
+			{
+				ImGui::SameLine( 0.0f, 0.0f );
+			}
 		}
-		ImGui::SetCursorPosY( ImGui::GetWindowHeight() - 31 );
+
+		// Status info on the right of header
+		ImGui::SameLine( 0.0f, 10.0f );
+		const bool recording = InterlockedCompareExchange( &g_bRecording, FALSE, FALSE ) != FALSE;
+		StatusBadge( recording, "REC", "READY" );
+		ImGui::SameLine( 0.0f, 8.0f );
+		TextDisabledWrapped( "#%04d", g_nFrame );
+		ImGui::SameLine( 0.0f, 8.0f );
 		char toggleName[96];
 		GetToggleBindingName( g_Gui.toggleKey, g_Gui.toggleModifiers, toggleName, sizeof( toggleName ), true );
-		TextDisabledWrapped( "Menu: [%s]", toggleName );
-		ImGui::EndChild();
-		ImGui::PopStyleColor();
-		ImGui::SameLine();
-		ImGui::BeginChild( "content", ImVec2( 0, 0 ), ImGuiChildFlags_Borders );
+		TextDisabledWrapped( "[%s]", toggleName );
+		ImGui::SameLine( 0.0f, 10.0f );
+		if ( ImGui::Button( "x", ImVec2( 20, 20 ) ) )
+		{
+			open = false;
+		}
+
+		// Continuous separator line under entire header
+		pDrawList->AddLine(
+			ImVec2( p0.x + 8.0f, tabBottomY ),
+			ImVec2( p1.x - 8.0f, tabBottomY ),
+			IM_COL32( 48, 48, 48, 255 ),
+			1.0f
+		);
+
+		// Content area below header
+		ImGui::SetCursorScreenPos( ImVec2( p0.x + 8.0f, tabBottomY + 6.0f ) );
+		const float contentHeight = mainWindowSize.y - ( ( tabBottomY + 6.0f ) - p0.y ) - 10.0f;
+		ImGui::BeginChild( "content", ImVec2( totalInnerWidth + 8.0f, contentHeight ), ImGuiChildFlags_Borders );
 
 		switch ( g_Gui.selectedPage )
 		{
