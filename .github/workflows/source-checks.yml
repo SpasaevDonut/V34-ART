@@ -35,5 +35,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: v34-art-v1.0
-          path: dist/v34-art-v1.0.zip
+          path: |
+            dist/v34-art-v1.0.zip
+            dist/*.dll
+            dist/*.exe
           if-no-files-found: error
