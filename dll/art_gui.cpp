@@ -1679,6 +1679,9 @@ namespace
 			"art_queue max_mb 256\r\n"
 			"art_queue reserve_mb 256\r\n"
 			"art_tga_compression auto\r\n"
+			"art_output_mode tga\r\n"
+			"art_ffmpeg_preset prores_422\r\n"
+			"art_ffmpeg_path default\r\n"
 			"host_framerate 0\r\n"
 			"art_preview off\r\n"
 			"art_record normal on\r\n"
@@ -1838,6 +1841,30 @@ namespace
 		AppendFormat( cfg, "art_tga_compression %s\r\n",
 			ArtTgaCompressionModeName( InterlockedCompareExchange(
 				&g_nArtTgaCompressionMode, 0, 0 ) ) );
+		AppendFormat( cfg, "art_output_mode %s\r\n",
+			GetArtOutputModeName( InterlockedCompareExchange(
+				&g_nArtOutputMode, 0, 0 ) ) );
+		const LONG currentFfmpegPreset = InterlockedCompareExchange( &g_nArtFfmpegPreset, 0, 0 );
+		if ( currentFfmpegPreset == ART_FFMPEG_PRESET_CUSTOM && g_szArtFfmpegCustomArgs[0] )
+		{
+			bool safeArgs = true;
+			for ( const char *p = g_szArtFfmpegCustomArgs; *p; ++p )
+			{
+				if ( *p == ';' || *p == '\r' || *p == '\n' )
+				{
+					safeArgs = false;
+					break;
+				}
+			}
+			if ( safeArgs )
+				AppendFormat( cfg, "art_ffmpeg_custom %s\r\n", g_szArtFfmpegCustomArgs );
+		}
+		AppendFormat( cfg, "art_ffmpeg_preset %s\r\n",
+			GetArtFfmpegPresetName( currentFfmpegPreset ) );
+		if ( !g_szArtFfmpegPath[0] || !Q_stricmp( g_szArtFfmpegPath, "default" ) || !Q_stricmp( g_szArtFfmpegPath, "ffmpeg.exe" ) )
+			AppendFormat( cfg, "art_ffmpeg_path default\r\n" );
+		else if ( IsSafeQuotedArgument( g_szArtFfmpegPath ) )
+			AppendFormat( cfg, "art_ffmpeg_path \"%s\"\r\n", g_szArtFfmpegPath );
 		AppendFormat( cfg, "art_gui_color accent %d %d %d %d\r\n",
 			ColorToByte( g_Gui.accentColor[0] ), ColorToByte( g_Gui.accentColor[1] ),
 			ColorToByte( g_Gui.accentColor[2] ), ColorToByte( g_Gui.accentColor[3] ) );
