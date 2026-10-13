@@ -3769,6 +3769,11 @@ namespace
 		{
 			IssueCommand( "art_demo_unpause_on_recording %s", autoResume ? "on" : "off" );
 		}
+		bool autoPause = g_Gui.autoPauseDemoAfterRecording;
+		if ( ImGui::Checkbox( "Pause demo after recording stops", &autoPause ) )
+		{
+			IssueCommand( "art_demo_pause_after_recording %s", autoPause ? "on" : "off" );
+		}
 
 		ImGui::Separator();
 		TextUnformattedWrapped( "Spectator" );
@@ -5949,8 +5954,7 @@ namespace
 		ImGui::EndChild();
 
 		ImGui::Spacing();
-		const float advancedSettingsHeight =
-			g_Gui.experimentalOptionsEnabled ? 280.0f : 230.0f;
+		const float advancedSettingsHeight = 285.0f;
 		ImGui::BeginChild( "advanced_settings", ImVec2( 0, advancedSettingsHeight ), ImGuiChildFlags_Borders );
 		TextUnformattedWrapped( "Diagnostics and experimental" );
 		bool statisticsOverlay = InterlockedCompareExchange(
@@ -5963,22 +5967,19 @@ namespace
 		if ( ImGui::Checkbox( "Unpause demo on recording start", &autoResumeDemo ) )
 			IssueCommand( "art_demo_unpause_on_recording %s", autoResumeDemo ? "on" : "off" );
 		TextDisabledWrapped( "Automatically executes demo_resume when recording starts." );
+		bool autoPauseDemoAfterRecording = g_Gui.autoPauseDemoAfterRecording;
+		if ( ImGui::Checkbox( "Pause demo after recording stops",
+			&autoPauseDemoAfterRecording ) )
+		{
+			IssueCommand( "art_demo_pause_after_recording %s",
+				autoPauseDemoAfterRecording ? "on" : "off" );
+		}
+		TextDisabledWrapped( "When a demo is playing, ART requests demo_pause before flushing queued footage." );
 		ImGui::Separator();
 		bool experimentalOptionsEnabled = g_Gui.experimentalOptionsEnabled;
 		if ( ImGui::Checkbox( "Enable experimental options", &experimentalOptionsEnabled ) )
 			IssueCommand( "art_gui_experimental %s", experimentalOptionsEnabled ? "on" : "off" );
 		TextDisabledWrapped( "Shows unfinished or less-tested controls." );
-		if ( g_Gui.experimentalOptionsEnabled )
-		{
-			bool autoPauseDemoAfterRecording = g_Gui.autoPauseDemoAfterRecording;
-			if ( ImGui::Checkbox( "Pause demo after recording stops (experimental)",
-				&autoPauseDemoAfterRecording ) )
-			{
-				IssueCommand( "art_demo_pause_after_recording %s",
-					autoPauseDemoAfterRecording ? "on" : "off" );
-			}
-			TextDisabledWrapped( "When a demo is playing, ART requests demo_pause before flushing queued footage." );
-		}
 		ImGui::Separator();
 		bool debugLogging = IsDebugLoggingEnabled();
 		if ( ImGui::Checkbox( "Diagnostic logging", &debugLogging ) )
@@ -8099,9 +8100,8 @@ namespace
 		}
 
 		g_Gui.autoPauseDemoAfterRecording = IsTruthy( g_pEngine->Cmd_Argv( 1 ) );
-		ArtConsoleMessage( "art_demo_pause_after_recording: %s%s.\n",
-			g_Gui.autoPauseDemoAfterRecording ? "on" : "off",
-			g_Gui.experimentalOptionsEnabled ? "" : " (inactive until experimental options are enabled)" );
+		ArtConsoleMessage( "art_demo_pause_after_recording: %s.\n",
+			g_Gui.autoPauseDemoAfterRecording ? "on" : "off" );
 	}
 
 	void ArtDemoUnpauseOnRecording_f()
@@ -8487,7 +8487,7 @@ namespace
 		"Set the hold key used for mirv_input control while the ART GUI remains open." );
 	ConCommand g_ArtDemoPauseAfterRecordingCommand( "art_demo_pause_after_recording",
 		ArtDemoPauseAfterRecording_f,
-		"Pause demo playback automatically when recording stops (experimental)." );
+		"Pause demo playback automatically when recording stops." );
 	ConCommand g_ArtDemoUnpauseOnRecordingCommand( "art_demo_unpause_on_recording",
 		ArtDemoUnpauseOnRecording_f,
 		"Unpause demo playback automatically when recording starts." );
@@ -8552,13 +8552,13 @@ namespace
 
 bool PauseArtDemoAfterRecordingIfEnabled()
 {
-	if ( !g_Gui.experimentalOptionsEnabled || !g_Gui.autoPauseDemoAfterRecording ||
+	if ( !g_Gui.autoPauseDemoAfterRecording ||
 		!g_pEngine || !g_pEngine->IsPlayingDemo() )
 	{
 		return false;
 	}
 	IssueCommand( "demo_pause" );
-	LogMessage( "DEMO AUTO-PAUSE REQUESTED: reason=recording_stopped experimental=1" );
+	LogMessage( "DEMO AUTO-PAUSE REQUESTED: reason=recording_stopped" );
 	return true;
 }
 

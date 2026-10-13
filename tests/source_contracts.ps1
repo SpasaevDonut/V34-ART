@@ -402,7 +402,7 @@ Require-NotText $gui 'ImGui::TextDisabled(' "Muted GUI text bypasses the auto-wr
 Require-Text $gui 'TextDisabledWrapped( "Global FOV overrides both the camera and viewmodel FOV.' "Global FOV definition must use muted wrapped text."
 Require-Text $gui 'ImGui::SetNextWindowSize( ImVec2( 1220, 760 )' "The main GUI does not use the requested wider default size."
 Require-Text $gui 'art_demo_pause_after_recording off' "Automatic demo pause must default to off."
-Require-Text $gui 'Pause demo after recording stops (experimental)' "Experimental automatic demo-pause GUI option is missing."
+Require-Text $gui 'Pause demo after recording stops' "Automatic demo-pause GUI option is missing."
 Require-Text $gui 'ConCommand g_ArtDemoPauseAfterRecordingCommand' "Automatic demo-pause command is missing."
 Require-Text $commands 'PauseArtDemoAfterRecordingIfEnabled();' "Recording stop does not request the configured demo pause."
 
@@ -413,6 +413,7 @@ if ($capturePageStart -lt 0 -or $passesPageBoundary -le $capturePageStart) {
 }
 else {
 	$capturePage = $gui.Substring($capturePageStart, $passesPageBoundary - $capturePageStart)
+	Require-Text $capturePage 'Pause demo after recording stops' "Demo pause after recording option is missing from Capture page."
 	if ($capturePage.IndexOf('"##host_framerate"', [StringComparison]::Ordinal) -gt
 		$capturePage.IndexOf('"capture_demo"', [StringComparison]::Ordinal)) {
 		$failures.Add("host_framerate must appear in the recording section before Demo playback.")
