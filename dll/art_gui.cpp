@@ -7170,7 +7170,7 @@ namespace
 		OT::EndGroup();
 
 		ImGui::SetCursorScreenPos( ImVec2( col2_x, top_group_y + 360.0f + 10.0f ) );
-		OT::BeginGroup( "file streams", col_w, 330.0f );
+		OT::BeginGroup( "file exports", col_w, 330.0f );
 		{
 			if ( OT::Button( "start AGR recording" ) )
 				IssueCommand( "mirv_agr start afxGameRecord.agr" );
