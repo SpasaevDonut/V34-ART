@@ -6915,7 +6915,8 @@ namespace
 		const float col1_x = content_pos.x + pad_x;
 		const float col2_x = col1_x + col_w + col_gap;
 
-		ArtHlaeStatus hlaeStatus = GetArtHlaeStatus();
+		ArtHlaeStatus hlaeStatus = {};
+		GetArtHlaeStatus( hlaeStatus );
 		bool hlaeEnable = hlaeStatus.enabled;
 		ImGui::SetCursorScreenPos( ImVec2( col1_x, content_pos.y + pad_y ) );
 		if ( OT::Checkbox( "enable hlae features", &hlaeEnable ) )
