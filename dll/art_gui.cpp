@@ -7,6 +7,7 @@
 #include "art_hlae.h"
 #include "art_ffmpeg.h"
 #include "art_d3d9_depth.h"
+#include "art_ot_ui.h"
 
 #define DIRECTINPUT_VERSION 0x0800
 #include <d3d9.h>
@@ -6254,8 +6255,6 @@ namespace
 		ImGui::End();
 	}
 
-#include "art_ot_ui.h"
-
 	void DrawMainWindowLegacy()
 	{
 		ApplyThemeColors();
@@ -6411,11 +6410,722 @@ namespace
 			SetArtGuiVisible( false );
 	}
 
+	void ProcessRecordingKeybinds()
+	{
+		// 1. Record toggle / hold
+		if ( OT::g_Menu.Binds.Record.mode == 0 )
+		{
+			if ( OT::g_Menu.Binds.Record.CheckPressed() )
+			{
+				if ( !InterlockedCompareExchange( &g_bRecording, FALSE, FALSE ) )
+					IssueCommand( "art_start" );
+			}
+			if ( OT::g_Menu.Binds.Record.CheckReleased() )
+			{
+				if ( InterlockedCompareExchange( &g_bRecording, FALSE, FALSE ) )
+					IssueCommand( "art_stop" );
+			}
+		}
+		else
+		{
+			if ( OT::g_Menu.Binds.Record.CheckPressed() )
+				IssueCommand( "art_toggle" );
+		}
+
+		// 2. Demo pause / resume
+		if ( OT::g_Menu.Binds.DemoPause.CheckPressed() )
+			IssueCommand( g_Gui.demoWasPlaying ? "demo_pause" : "demo_resume" );
+
+		// 3. Demo step back 100 ticks
+		if ( OT::g_Menu.Binds.DemoBack.CheckPressed() )
+		{
+			const int curTick = g_Gui.currentDemoTickValid ? g_Gui.currentDemoTick : g_Gui.demoTick;
+			SeekDemoTick( ( curTick > 100 ) ? ( curTick - 100 ) : 0 );
+		}
+
+		// 4. Demo step forward 100 ticks
+		if ( OT::g_Menu.Binds.DemoFwd.CheckPressed() )
+		{
+			const int curTick = g_Gui.currentDemoTickValid ? g_Gui.currentDemoTick : g_Gui.demoTick;
+			SeekDemoTick( curTick + 100 );
+		}
+
+		// 5. Campath add keyframe
+		if ( OT::g_Menu.Binds.CampathAdd.CheckPressed() )
+			IssueCommand( "mirv_campath add" );
+
+		// 6. Live preview toggle
+		if ( OT::g_Menu.Binds.Preview.CheckPressed() )
+			IssueCommand( "art_preview toggle" );
+
+		// 7. HUD toggle
+		if ( OT::g_Menu.Binds.Hud.CheckPressed() )
+			IssueCommand( "art_hud toggle" );
+
+		// 8. Thirdperson toggle
+		if ( OT::g_Menu.Binds.Thirdperson.CheckPressed() )
+		{
+			OT::g_Menu.Thirdperson = !OT::g_Menu.Thirdperson;
+			IssueCommand( OT::g_Menu.Thirdperson ? "thirdperson" : "firstperson" );
+		}
+	}
+
+	void RenderCaptureTab( float col_w, ImVec2 content_pos )
+	{
+		const float pad_x = 32.0f;
+		const float pad_y = 16.0f;
+		const float col_gap = 18.0f;
+		const float col1_x = content_pos.x + pad_x;
+		const float col2_x = col1_x + col_w + col_gap;
+
+		bool recordingActive = InterlockedCompareExchange( &g_bRecording, FALSE, FALSE ) != FALSE;
+		ImGui::SetCursorScreenPos( ImVec2( col1_x, content_pos.y + pad_y ) );
+		if ( OT::Checkbox( "recording active", &recordingActive ) )
+			IssueCommand( "art_toggle" );
+
+		const float top_group_y = content_pos.y + pad_y + 14.0f + 10.0f;
+
+		// LEFT COLUMN
+		ImGui::SetCursorScreenPos( ImVec2( col1_x, top_group_y ) );
+		OT::BeginGroup( "recording settings", col_w, 160.0f );
+		{
+			if ( OT::Checkbox( "auto pause demo after rec", &g_Gui.autoPauseDemoAfterRecording ) )
+				IssueCommand( g_Gui.autoPauseDemoAfterRecording ? "art_demo_pause_after_recording on" : "art_demo_pause_after_recording off" );
+
+			if ( OT::Checkbox( "auto resume demo on rec", &g_Gui.autoResumeDemoOnRecordingStart ) )
+				IssueCommand( g_Gui.autoResumeDemoOnRecordingStart ? "art_demo_unpause_on_recording on" : "art_demo_unpause_on_recording off" );
+
+			static int fps_preset = 0;
+			static const char *fps_presets[] = { "default (0)", "150 fps", "300 fps", "600 fps", "2000 fps" };
+			if ( OT::Combo( "framerate preset", &fps_preset, fps_presets, 5 ) )
+			{
+				static const int rates[] = { 0, 150, 300, 600, 2000 };
+				g_Gui.hostFramerate = rates[fps_preset];
+				IssueCommand( "host_framerate %d", g_Gui.hostFramerate );
+			}
+
+			if ( OT::SliderInt( "framerate", &g_Gui.hostFramerate, 0, 2000, " fps" ) )
+				IssueCommand( "host_framerate %d", g_Gui.hostFramerate );
+		}
+		OT::EndGroup();
+
+		ImGui::SetCursorScreenPos( ImVec2( col1_x, top_group_y + 160.0f + 10.0f ) );
+		OT::BeginGroup( "recording keybinds", col_w, 245.0f );
+		{
+			OT::Keybind( "record toggle key", &OT::g_Menu.Binds.Record.key, &OT::g_Menu.Binds.Record.mode );
+			OT::Keybind( "demo pause key", &OT::g_Menu.Binds.DemoPause.key, &OT::g_Menu.Binds.DemoPause.mode );
+			OT::Keybind( "demo step back (-100)", &OT::g_Menu.Binds.DemoBack.key, &OT::g_Menu.Binds.DemoBack.mode );
+			OT::Keybind( "demo step fwd (+100)", &OT::g_Menu.Binds.DemoFwd.key, &OT::g_Menu.Binds.DemoFwd.mode );
+			OT::Keybind( "preview toggle key", &OT::g_Menu.Binds.Preview.key, &OT::g_Menu.Binds.Preview.mode );
+		}
+		OT::EndGroup();
+
+		// RIGHT COLUMN
+		ImGui::SetCursorScreenPos( ImVec2( col2_x, top_group_y ) );
+		OT::BeginGroup( "demo playback", col_w, 205.0f );
+		{
+			OT::SliderInt( "demo tick", &g_Gui.demoTick, 0, 100000 );
+			if ( OT::Button( "goto target tick" ) )
+				SeekDemoTick( g_Gui.demoTick );
+
+			if ( OT::Button( g_Gui.demoWasPlaying ? "pause demo" : "resume demo" ) )
+				IssueCommand( g_Gui.demoWasPlaying ? "demo_pause" : "demo_resume" );
+
+			if ( OT::Checkbox( "hide spectator ui", &g_Gui.spectatorUiHidden ) )
+				SetSpectatorUiHidden( g_Gui.spectatorUiHidden );
+
+			if ( OT::Button( "stop recording now" ) )
+				IssueCommand( "art_stop" );
+		}
+		OT::EndGroup();
+
+		ImGui::SetCursorScreenPos( ImVec2( col2_x, top_group_y + 205.0f + 10.0f ) );
+		OT::BeginGroup( "overlays & preview", col_w, 200.0f );
+		{
+			LONG preview = InterlockedCompareExchange( &g_nPreviewPass, ART_PREVIEW_NONE, ART_PREVIEW_NONE );
+			bool previewActive = ( preview != ART_PREVIEW_NONE );
+			if ( OT::Checkbox( "live preview window", &previewActive ) )
+				IssueCommand( previewActive ? "art_preview off" : "art_preview normal" );
+
+			bool hud = InterlockedCompareExchange( &g_bArtStatisticsOverlayEnabled, FALSE, FALSE ) != FALSE;
+			if ( OT::Checkbox( "statistics overlay", &hud ) )
+				InterlockedExchange( &g_bArtStatisticsOverlayEnabled, hud ? FALSE : TRUE );
+
+			OT::Keybind( "hud toggle key", &OT::g_Menu.Binds.Hud.key, &OT::g_Menu.Binds.Hud.mode );
+		}
+		OT::EndGroup();
+	}
+
+	void RenderPassesTab( float col_w, ImVec2 content_pos )
+	{
+		const float pad_x = 32.0f;
+		const float pad_y = 16.0f;
+		const float col_gap = 18.0f;
+		const float col1_x = content_pos.x + pad_x;
+		const float col2_x = col1_x + col_w + col_gap;
+
+		ImGui::SetCursorScreenPos( ImVec2( col1_x, content_pos.y + pad_y ) );
+		OT::Checkbox( "enable passes", &OT::g_Menu.PassesEnable );
+
+		const float top_group_y = content_pos.y + pad_y + 14.0f + 10.0f;
+
+		// LEFT COLUMN
+		ImGui::SetCursorScreenPos( ImVec2( col1_x, top_group_y ) );
+		OT::BeginGroup( "capture passes", col_w, 275.0f );
+		{
+			LONG mask = InterlockedCompareExchange( &g_nRecordMask, 0, 0 );
+
+			bool p_normal = ( mask & ( 1 << 0 ) ) != 0;
+			if ( OT::Checkbox( "normal pass", &p_normal ) )
+				InterlockedXor( &g_nRecordMask, 1 << 0 );
+
+			bool p_clear = ( mask & ( 1 << 1 ) ) != 0;
+			if ( OT::Checkbox( "clear pass (no hud)", &p_clear ) )
+				InterlockedXor( &g_nRecordMask, 1 << 1 );
+
+			bool p_noplayers = ( mask & ( 1 << 2 ) ) != 0;
+			if ( OT::Checkbox( "clear-noplayers pass", &p_noplayers ) )
+				InterlockedXor( &g_nRecordMask, 1 << 2 );
+
+			bool p_viewmodel = ( mask & ( 1 << 3 ) ) != 0;
+			if ( OT::Checkbox( "viewmodel pass", &p_viewmodel ) )
+				InterlockedXor( &g_nRecordMask, 1 << 3 );
+
+			bool p_players = ( mask & ( 1 << 4 ) ) != 0;
+			if ( OT::Checkbox( "players pass", &p_players ) )
+				InterlockedXor( &g_nRecordMask, 1 << 4 );
+
+			bool p_depth = ( mask & ( 1 << 5 ) ) != 0;
+			if ( OT::Checkbox( "depth pass", &p_depth ) )
+				InterlockedXor( &g_nRecordMask, 1 << 5 );
+
+			bool p_objectid = ( mask & ( 1 << 6 ) ) != 0;
+			if ( OT::Checkbox( "objectid pass", &p_objectid ) )
+				InterlockedXor( &g_nRecordMask, 1 << 6 );
+		}
+		OT::EndGroup();
+
+		ImGui::SetCursorScreenPos( ImVec2( col1_x, top_group_y + 275.0f + 10.0f ) );
+		OT::BeginGroup( "depth pass setup", col_w, 130.0f );
+		{
+			int d_start = static_cast<int>( g_ArtRecordingStats.depthStart );
+			if ( OT::SliderInt( "depth start", &d_start, 0, 1000 ) )
+			{
+				g_ArtRecordingStats.depthStart = static_cast<float>( d_start );
+				IssueCommand( "art_depth_start %d", d_start );
+			}
+
+			int d_end = static_cast<int>( g_ArtRecordingStats.depthEnd );
+			if ( OT::SliderInt( "depth end", &d_end, 100, 8000 ) )
+			{
+				g_ArtRecordingStats.depthEnd = static_cast<float>( d_end );
+				IssueCommand( "art_depth_end %d", d_end );
+			}
+		}
+		OT::EndGroup();
+
+		// RIGHT COLUMN
+		ImGui::SetCursorScreenPos( ImVec2( col2_x, top_group_y ) );
+		OT::BeginGroup( "background colors", col_w, 220.0f );
+		{
+			float vm_col[4] = { g_nViewmodelBackgroundRed / 255.0f, g_nViewmodelBackgroundGreen / 255.0f, g_nViewmodelBackgroundBlue / 255.0f, 1.0f };
+			if ( OT::CheckboxColor( "viewmodel background", &OT::g_Menu.VmBgActive, vm_col ) )
+				IssueCommand( "art_viewmodel_color %d %d %d", static_cast<int>( vm_col[0] * 255.0f ), static_cast<int>( vm_col[1] * 255.0f ), static_cast<int>( vm_col[2] * 255.0f ) );
+
+			float pl_col[4] = { g_nPlayersBackgroundRed / 255.0f, g_nPlayersBackgroundGreen / 255.0f, g_nPlayersBackgroundBlue / 255.0f, 1.0f };
+			if ( OT::CheckboxColor( "players background", &OT::g_Menu.PlBgActive, pl_col ) )
+				IssueCommand( "art_players_color %d %d %d", static_cast<int>( pl_col[0] * 255.0f ), static_cast<int>( pl_col[1] * 255.0f ), static_cast<int>( pl_col[2] * 255.0f ) );
+
+			float obj_w[4] = { g_nObjectIdWorldRed / 255.0f, g_nObjectIdWorldGreen / 255.0f, g_nObjectIdWorldBlue / 255.0f, 1.0f };
+			if ( OT::CheckboxColor( "objectid world color", &OT::g_Menu.ObjWorldActive, obj_w ) )
+				IssueCommand( "art_objectid_color world %d %d %d", static_cast<int>( obj_w[0] * 255.0f ), static_cast<int>( obj_w[1] * 255.0f ), static_cast<int>( obj_w[2] * 255.0f ) );
+
+			float obj_s[4] = { g_nObjectIdSkyboxRed / 255.0f, g_nObjectIdSkyboxGreen / 255.0f, g_nObjectIdSkyboxBlue / 255.0f, 1.0f };
+			if ( OT::CheckboxColor( "objectid skybox color", &OT::g_Menu.ObjSkyActive, obj_s ) )
+				IssueCommand( "art_objectid_color skybox %d %d %d", static_cast<int>( obj_s[0] * 255.0f ), static_cast<int>( obj_s[1] * 255.0f ), static_cast<int>( obj_s[2] * 255.0f ) );
+		}
+		OT::EndGroup();
+
+		ImGui::SetCursorScreenPos( ImVec2( col2_x, top_group_y + 220.0f + 10.0f ) );
+		OT::BeginGroup( "pass options", col_w, 185.0f );
+		{
+			OT::Checkbox( "players world weapons", &OT::g_Menu.WorldWeapons );
+
+			static const char *depth_modes[] = { "linear depth", "inverse depth", "raw z-buffer" };
+			OT::Combo( "depth mode", &OT::g_Menu.DepthMode, depth_modes, 3 );
+
+			if ( OT::Button( "reset colors to default" ) )
+			{
+				IssueCommand( "art_viewmodel_color 0 255 0" );
+				IssueCommand( "art_players_color 0 255 0" );
+			}
+		}
+		OT::EndGroup();
+	}
+
+	void RenderVisualsTab( float col_w, ImVec2 content_pos )
+	{
+		const float pad_x = 32.0f;
+		const float pad_y = 16.0f;
+		const float col_gap = 18.0f;
+		const float col1_x = content_pos.x + pad_x;
+		const float col2_x = col1_x + col_w + col_gap;
+
+		ImGui::SetCursorScreenPos( ImVec2( col1_x, content_pos.y + pad_y ) );
+		OT::Checkbox( "enable visuals", &OT::g_Menu.VisualsEnable );
+
+		const float top_group_y = content_pos.y + pad_y + 14.0f + 10.0f;
+
+		// LEFT COLUMN
+		ImGui::SetCursorScreenPos( ImVec2( col1_x, top_group_y ) );
+		OT::BeginGroup( "effects suppression", col_w, 160.0f );
+		{
+			bool no_flash = InterlockedCompareExchange( &g_bNoFlashEnabled, FALSE, FALSE ) != FALSE;
+			if ( OT::Checkbox( "no flash effect", &no_flash ) )
+				IssueCommand( "art_noflash %s", no_flash ? "on" : "off" );
+
+			bool no_smoke = InterlockedCompareExchange( &g_bNoSmokeEnabled, FALSE, FALSE ) != FALSE;
+			if ( OT::Checkbox( "no smoke particles", &no_smoke ) )
+				IssueCommand( "art_nosmoke %s", no_smoke ? "on" : "off" );
+
+			bool forceLod = InterlockedCompareExchange( &g_bForceRenderLodEnabled, FALSE, FALSE ) != FALSE;
+			if ( OT::Checkbox( "force max model lod", &forceLod ) )
+				IssueCommand( "art_force_r_lod %s", forceLod ? "on" : "off" );
+		}
+		OT::EndGroup();
+
+		ImGui::SetCursorScreenPos( ImVec2( col1_x, top_group_y + 160.0f + 10.0f ) );
+		OT::BeginGroup( "field of view (fov)", col_w, 245.0f );
+		{
+			bool override_fov = !g_Gui.globalFovDefault;
+			if ( OT::Checkbox( "override global fov", &override_fov ) )
+			{
+				g_Gui.globalFovDefault = !override_fov;
+				IssueCommand( override_fov ? "art_fov 90" : "art_fov default" );
+			}
+
+			int fov_int = static_cast<int>( g_flGlobalFov );
+			if ( OT::SliderInt( "camera fov", &fov_int, 30, 150 ) )
+			{
+				g_flGlobalFov = static_cast<float>( fov_int );
+				IssueCommand( "art_fov %.1f", g_flGlobalFov );
+			}
+
+			OT::Keybind( "fov toggle key", &OT::g_Menu.Binds.Fov.key, &OT::g_Menu.Binds.Fov.mode );
+		}
+		OT::EndGroup();
+
+		// RIGHT COLUMN
+		ImGui::SetCursorScreenPos( ImVec2( col2_x, top_group_y ) );
+		OT::BeginGroup( "chams & materials", col_w, 235.0f );
+		{
+			bool pl_chams = InterlockedCompareExchange( &g_bPlayerChamsEnabled, FALSE, FALSE ) != FALSE;
+			float pl_col[4] = { g_nPlayerChamsRed / 255.0f, g_nPlayerChamsGreen / 255.0f, g_nPlayerChamsBlue / 255.0f, 1.0f };
+			if ( OT::CheckboxColor( "player chams", &pl_chams, pl_col ) )
+			{
+				IssueCommand( "art_chams players %s", pl_chams ? "on" : "off" );
+				IssueCommand( "art_chams players_color %d %d %d", static_cast<int>( pl_col[0] * 255.0f ), static_cast<int>( pl_col[1] * 255.0f ), static_cast<int>( pl_col[2] * 255.0f ) );
+			}
+
+			bool vm_chams = InterlockedCompareExchange( &g_bViewmodelChamsEnabled, FALSE, FALSE ) != FALSE;
+			float vm_col[4] = { g_nViewmodelChamsRed / 255.0f, g_nViewmodelChamsGreen / 255.0f, g_nViewmodelChamsBlue / 255.0f, 1.0f };
+			if ( OT::CheckboxColor( "viewmodel chams", &vm_chams, vm_col ) )
+			{
+				IssueCommand( "art_chams viewmodel %s", vm_chams ? "on" : "off" );
+				IssueCommand( "art_chams viewmodel_color %d %d %d", static_cast<int>( vm_col[0] * 255.0f ), static_cast<int>( vm_col[1] * 255.0f ), static_cast<int>( vm_col[2] * 255.0f ) );
+			}
+
+			bool sky_chams = InterlockedCompareExchange( &g_bSkyboxChamsEnabled, FALSE, FALSE ) != FALSE;
+			float sky_col[4] = { g_nSkyboxChamsRed / 255.0f, g_nSkyboxChamsGreen / 255.0f, g_nSkyboxChamsBlue / 255.0f, 1.0f };
+			if ( OT::CheckboxColor( "skybox tint", &sky_chams, sky_col ) )
+			{
+				IssueCommand( "art_chams skybox %s", sky_chams ? "on" : "off" );
+				IssueCommand( "art_chams skybox_color %d %d %d", static_cast<int>( sky_col[0] * 255.0f ), static_cast<int>( sky_col[1] * 255.0f ), static_cast<int>( sky_col[2] * 255.0f ) );
+			}
+
+			static const char *chams_types[] = { "solid flat", "textured", "wireframe" };
+			OT::Combo( "chams style", &OT::g_Menu.ChamsStyle, chams_types, 3 );
+		}
+		OT::EndGroup();
+
+		ImGui::SetCursorScreenPos( ImVec2( col2_x, top_group_y + 235.0f + 10.0f ) );
+		OT::BeginGroup( "thirdperson camera", col_w, 170.0f );
+		{
+			if ( OT::Checkbox( "thirdperson view", &OT::g_Menu.Thirdperson ) )
+				IssueCommand( OT::g_Menu.Thirdperson ? "thirdperson" : "firstperson" );
+
+			OT::Keybind( "thirdperson key", &OT::g_Menu.Binds.Thirdperson.key, &OT::g_Menu.Binds.Thirdperson.mode );
+			OT::SliderInt( "camera distance", &OT::g_Menu.ThirdpersonDist, 30, 300 );
+		}
+		OT::EndGroup();
+	}
+
+	void RenderOutputTab( float col_w, ImVec2 content_pos )
+	{
+		const float pad_x = 32.0f;
+		const float pad_y = 16.0f;
+		const float col_gap = 18.0f;
+		const float col1_x = content_pos.x + pad_x;
+		const float col2_x = col1_x + col_w + col_gap;
+		const float top_group_y = content_pos.y + pad_y + 10.0f;
+
+		// LEFT COLUMN
+		ImGui::SetCursorScreenPos( ImVec2( col1_x, top_group_y ) );
+		OT::BeginGroup( "recording pipeline", col_w, 205.0f );
+		{
+			static const char *output_modes[] = { "tga image sequence", "ffmpeg direct pipe" };
+			int modeIdx = ( g_ArtOutputMode == ART_OUTPUT_MODE_FFMPEG ) ? 1 : 0;
+			if ( OT::Combo( "pipeline mode", &modeIdx, output_modes, 2 ) )
+				IssueCommand( "art_output_mode %s", modeIdx == 1 ? "ffmpeg" : "tga" );
+
+			bool rle = ( g_ArtTgaCompression == ART_TGA_COMPRESSION_RLE );
+			if ( OT::Checkbox( "tga rle compression", &rle ) )
+				IssueCommand( "art_tga_compression %s", rle ? "rle" : "none" );
+
+			bool manifest = InterlockedCompareExchange( &g_bTakeJsonEnabled, FALSE, FALSE ) != FALSE;
+			if ( OT::Checkbox( "take json manifest", &manifest ) )
+				IssueCommand( "art_take_json %s", manifest ? "on" : "off" );
+		}
+		OT::EndGroup();
+
+		ImGui::SetCursorScreenPos( ImVec2( col1_x, top_group_y + 205.0f + 10.0f ) );
+		OT::BeginGroup( "queue & memory", col_w, 200.0f );
+		{
+			OT::SliderInt( "max queue files", &OT::g_Menu.QueueFiles, 50, 5000 );
+			OT::SliderInt( "max queue memory", &OT::g_Menu.QueueMb, 64, 2048, " mb" );
+			if ( OT::Button( "flush writer queue" ) )
+				IssueCommand( "art_flush" );
+		}
+		OT::EndGroup();
+
+		// RIGHT COLUMN
+		ImGui::SetCursorScreenPos( ImVec2( col2_x, top_group_y ) );
+		OT::BeginGroup( "ffmpeg video encoding", col_w, 235.0f );
+		{
+			static const char *presets[] = { "prores422", "prores4444", "x264_lossless", "x264_hq", "nvenc_h264", "nvenc_hevc", "custom" };
+			if ( OT::Combo( "encoder preset", &OT::g_Menu.FfmpegPreset, presets, 7 ) )
+				IssueCommand( "art_ffmpeg_preset %s", presets[OT::g_Menu.FfmpegPreset] );
+
+			OT::SliderInt( "ffmpeg crf / quality", &OT::g_Menu.FfmpegCrf, 0, 51 );
+
+			if ( OT::Button( "test ffmpeg installation" ) )
+				IssueCommand( "art_ffmpeg_test" );
+		}
+		OT::EndGroup();
+
+		ImGui::SetCursorScreenPos( ImVec2( col2_x, top_group_y + 235.0f + 10.0f ) );
+		OT::BeginGroup( "folders & exploration", col_w, 170.0f );
+		{
+			if ( OT::Button( "open output / takes folder" ) )
+				OpenConfiguredOutputDirectory();
+		}
+		OT::EndGroup();
+	}
+
+	void RenderInfoTab( float col_w, ImVec2 content_pos )
+	{
+		const float pad_x = 32.0f;
+		const float pad_y = 16.0f;
+		const float col_gap = 18.0f;
+		const float col1_x = content_pos.x + pad_x;
+		const float col2_x = col1_x + col_w + col_gap;
+		const float top_group_y = content_pos.y + pad_y + 10.0f;
+
+		// LEFT COLUMN
+		ImGui::SetCursorScreenPos( ImVec2( col1_x, top_group_y ) );
+		OT::BeginGroup( "take session stats", col_w, 205.0f );
+		{
+			ImGui::Text( "take: %s", g_ArtRecordingStats.takeName[0] ? g_ArtRecordingStats.takeName : "none" );
+			ImGui::Dummy( ImVec2( 0, 4.0f ) );
+			ImGui::Text( "frames: %d", static_cast<int>( g_ArtRecordingStats.takeFrames ) );
+			ImGui::Dummy( ImVec2( 0, 4.0f ) );
+			ImGui::Text( "files: %lu", g_ArtRecordingStats.takeFiles );
+			ImGui::Dummy( ImVec2( 0, 6.0f ) );
+			if ( OT::Button( "run integrity validation" ) )
+				IssueCommand( "art_validation" );
+		}
+		OT::EndGroup();
+
+		ImGui::SetCursorScreenPos( ImVec2( col1_x, top_group_y + 205.0f + 10.0f ) );
+		OT::BeginGroup( "pipeline performance", col_w, 200.0f );
+		{
+			ImGui::Text( "render: %.2f ms", g_ArtPipelineStats.stages[0].takeSamples ? static_cast<double>( g_ArtPipelineStats.stages[0].takeTotalMicroseconds ) / g_ArtPipelineStats.stages[0].takeSamples / 1000.0 : 0.0 );
+			ImGui::Dummy( ImVec2( 0, 3.0f ) );
+			ImGui::Text( "read: %.2f ms", g_ArtPipelineStats.stages[1].takeSamples ? static_cast<double>( g_ArtPipelineStats.stages[1].takeTotalMicroseconds ) / g_ArtPipelineStats.stages[1].takeSamples / 1000.0 : 0.0 );
+			ImGui::Dummy( ImVec2( 0, 3.0f ) );
+			ImGui::Text( "encode: %.2f ms", g_ArtPipelineStats.stages[2].takeSamples ? static_cast<double>( g_ArtPipelineStats.stages[2].takeTotalMicroseconds ) / g_ArtPipelineStats.stages[2].takeSamples / 1000.0 : 0.0 );
+			ImGui::Dummy( ImVec2( 0, 3.0f ) );
+			ImGui::Text( "write: %.2f ms", g_ArtPipelineStats.stages[3].takeSamples ? static_cast<double>( g_ArtPipelineStats.stages[3].takeTotalMicroseconds ) / g_ArtPipelineStats.stages[3].takeSamples / 1000.0 : 0.0 );
+		}
+		OT::EndGroup();
+
+		// RIGHT COLUMN
+		ImGui::SetCursorScreenPos( ImVec2( col2_x, top_group_y ) );
+		OT::BeginGroup( "engine & platform", col_w, 205.0f );
+		{
+			ImGui::Text( "CS:S v34 Engine Build 4044" );
+			ImGui::Dummy( ImVec2( 0, 4.0f ) );
+			ImGui::Text( "Direct3D 9 (Win32 x86)" );
+			ImGui::Dummy( ImVec2( 0, 4.0f ) );
+			MEMORYSTATUSEX memStatus = {};
+			memStatus.dwLength = sizeof( memStatus );
+			GlobalMemoryStatusEx( &memStatus );
+			ImGui::Text( "free RAM: %llu MB", memStatus.ullAvailPhys / ( 1024 * 1024 ) );
+		}
+		OT::EndGroup();
+
+		ImGui::SetCursorScreenPos( ImVec2( col2_x, top_group_y + 205.0f + 10.0f ) );
+		OT::BeginGroup( "about art", col_w, 200.0f );
+		{
+			ImGui::Text( "CS:S V34 ART V1.0" );
+			ImGui::Dummy( ImVec2( 0, 3.0f ) );
+			ImGui::Text( "Created by Contrastniy" );
+			ImGui::Dummy( ImVec2( 0, 6.0f ) );
+			if ( OT::Button( "YouTube: @Contrastniy" ) )
+				ShellExecuteA( NULL, "open", "https://www.youtube.com/@Contrastniy", NULL, NULL, SW_SHOWNORMAL );
+		}
+		OT::EndGroup();
+	}
+
+	void RenderHlaeTab( float col_w, ImVec2 content_pos )
+	{
+		const float pad_x = 32.0f;
+		const float pad_y = 16.0f;
+		const float col_gap = 18.0f;
+		const float col1_x = content_pos.x + pad_x;
+		const float col2_x = col1_x + col_w + col_gap;
+
+		ImGui::SetCursorScreenPos( ImVec2( col1_x, content_pos.y + pad_y ) );
+		OT::Checkbox( "enable hlae features", &OT::g_Menu.HlaeEnable );
+
+		const float top_group_y = content_pos.y + pad_y + 14.0f + 10.0f;
+
+		// LEFT COLUMN
+		ImGui::SetCursorScreenPos( ImVec2( col1_x, top_group_y ) );
+		OT::BeginGroup( "camera path (campath)", col_w, 220.0f );
+		{
+			bool cpDraw = InterlockedCompareExchange( &g_Hlae.campathDraw, FALSE, FALSE ) != FALSE;
+			if ( OT::Checkbox( "draw camera path", &cpDraw ) )
+				IssueCommand( "mirv_campath draw enabled %d", cpDraw ? 1 : 0 );
+
+			OT::Keybind( "add keyframe key", &OT::g_Menu.Binds.CampathAdd.key, &OT::g_Menu.Binds.CampathAdd.mode );
+
+			if ( OT::Button( "add keyframe (mirv_campath add)" ) )
+				IssueCommand( "mirv_campath add" );
+
+			if ( OT::Button( "remove keyframe" ) )
+				IssueCommand( "mirv_campath remove" );
+
+			if ( OT::Button( "clear all (mirv_campath clear)" ) )
+				IssueCommand( "mirv_campath clear" );
+		}
+		OT::EndGroup();
+
+		ImGui::SetCursorScreenPos( ImVec2( col1_x, top_group_y + 220.0f + 10.0f ) );
+		OT::BeginGroup( "campath playback", col_w, 185.0f );
+		{
+			if ( OT::Button( "start at current time" ) )
+				IssueCommand( "mirv_campath start" );
+
+			if ( OT::Button( g_Gui.demoWasPlaying ? "pause demo" : "resume demo" ) )
+				IssueCommand( g_Gui.demoWasPlaying ? "demo_pause" : "demo_resume" );
+
+			OT::SliderInt( "demo tick", &g_Gui.demoTick, 0, 100000 );
+		}
+		OT::EndGroup();
+
+		// RIGHT COLUMN
+		ImGui::SetCursorScreenPos( ImVec2( col2_x, top_group_y ) );
+		OT::BeginGroup( "camera import & export", col_w, 220.0f );
+		{
+			if ( OT::Button( "export .cam (camera.cam)" ) )
+				IssueCommand( "mirv_camio export start camera.cam" );
+
+			if ( OT::Button( "import .cam (camera.cam)" ) )
+				IssueCommand( "mirv_camio import start camera.cam" );
+
+			if ( OT::Button( "export .bvh (camera.bvh)" ) )
+				IssueCommand( "mirv_camexport start camera.bvh 30" );
+
+			if ( OT::Button( "import .bvh (camera.bvh)" ) )
+				IssueCommand( "mirv_camimport start camera.bvh" );
+		}
+		OT::EndGroup();
+
+		ImGui::SetCursorScreenPos( ImVec2( col2_x, top_group_y + 220.0f + 10.0f ) );
+		OT::BeginGroup( "game record (.agr)", col_w, 185.0f );
+		{
+			OT::Checkbox( "auto-export with art takes", &OT::g_Menu.AgrAutoExport );
+
+			if ( OT::Button( "start agr recording" ) )
+				IssueCommand( "mirv_agr start afxGameRecord.agr" );
+
+			if ( OT::Button( "stop agr recording" ) )
+				IssueCommand( "mirv_agr stop" );
+		}
+		OT::EndGroup();
+	}
+
+	void RenderConfigsTab( float col_w, ImVec2 content_pos )
+	{
+		const float pad_x = 32.0f;
+		const float pad_y = 16.0f;
+		const float col_gap = 18.0f;
+		const float col1_x = content_pos.x + pad_x;
+		const float col2_x = col1_x + col_w + col_gap;
+		const float top_group_y = content_pos.y + pad_y + 10.0f;
+
+		// LEFT COLUMN
+		ImGui::SetCursorScreenPos( ImVec2( col1_x, top_group_y ) );
+		OT::BeginGroup( "theme & colors", col_w, 210.0f );
+		{
+			float accent_col[4] = { OT::g_Theme.Accent.x, OT::g_Theme.Accent.y, OT::g_Theme.Accent.z, OT::g_Theme.Accent.w };
+			if ( OT::CheckboxColor( "accent color", &OT::g_Menu.AccentDummy, accent_col ) )
+				OT::g_Theme.Accent = ImVec4( accent_col[0], accent_col[1], accent_col[2], accent_col[3] );
+
+			static const char *color_presets[] = { "onetap v1 blue", "onetap v3 purple", "skeet green", "crimson red" };
+			if ( OT::Combo( "color presets", &OT::g_Menu.ColorPreset, color_presets, 4 ) )
+			{
+				if ( OT::g_Menu.ColorPreset == 0 ) OT::g_Theme.Accent = ImVec4( 77.f / 255.f, 123.f / 255.f, 255.f / 255.f, 1.f );
+				else if ( OT::g_Menu.ColorPreset == 1 ) OT::g_Theme.Accent = ImVec4( 147.f / 255.f, 112.f / 255.f, 219.f / 255.f, 1.f );
+				else if ( OT::g_Menu.ColorPreset == 2 ) OT::g_Theme.Accent = ImVec4( 140.f / 255.f, 200.f / 255.f, 70.f / 255.f, 1.f );
+				else if ( OT::g_Menu.ColorPreset == 3 ) OT::g_Theme.Accent = ImVec4( 230.f / 255.f, 60.f / 255.f, 60.f / 255.f, 1.f );
+			}
+		}
+		OT::EndGroup();
+
+		ImGui::SetCursorScreenPos( ImVec2( col1_x, top_group_y + 210.0f + 10.0f ) );
+		OT::BeginGroup( "actions", col_w, 195.0f );
+		{
+			if ( OT::Button( "reset to default blue" ) )
+				OT::g_Theme.Accent = ImVec4( 77.f / 255.f, 123.f / 255.f, 255.f / 255.f, 1.f );
+
+			if ( OT::Button( "reset everything to defaults" ) )
+				ResetEverythingToDefaults();
+		}
+		OT::EndGroup();
+
+		// RIGHT COLUMN
+		ImGui::SetCursorScreenPos( ImVec2( col2_x, top_group_y ) );
+		OT::BeginGroup( "configuration slots", col_w, 210.0f );
+		{
+			static const char *cfg_slots[] = { "default", "high_fps", "quality_prores", "depth_isolated", "hlae_cinematic" };
+			OT::Combo( "config slot", &OT::g_Menu.ConfigSlot, cfg_slots, 5 );
+
+			if ( OT::Button( "load selected config" ) )
+				LoadConfig( cfg_slots[OT::g_Menu.ConfigSlot] );
+
+			if ( OT::Button( "save to selected config" ) )
+				SaveConfig( cfg_slots[OT::g_Menu.ConfigSlot] );
+		}
+		OT::EndGroup();
+
+		ImGui::SetCursorScreenPos( ImVec2( col2_x, top_group_y + 210.0f + 10.0f ) );
+		OT::BeginGroup( "preset management", col_w, 195.0f );
+		{
+			if ( OT::Button( "save as startup default" ) )
+				SaveConfig( "default" );
+
+			if ( OT::Button( "reload active config" ) )
+				LoadConfig( "default" );
+		}
+		OT::EndGroup();
+	}
+
+	void RenderSettingsTab( float col_w, ImVec2 content_pos )
+	{
+		const float pad_x = 32.0f;
+		const float pad_y = 16.0f;
+		const float col_gap = 18.0f;
+		const float col1_x = content_pos.x + pad_x;
+		const float col2_x = col1_x + col_w + col_gap;
+		const float top_group_y = content_pos.y + pad_y + 10.0f;
+
+		// LEFT COLUMN
+		ImGui::SetCursorScreenPos( ImVec2( col1_x, top_group_y ) );
+		OT::BeginGroup( "menu & input", col_w, 210.0f );
+		{
+			OT::Keybind( "menu toggle key", &OT::g_Menu.Binds.MenuToggle.key, &OT::g_Menu.Binds.MenuToggle.mode );
+			OT::Checkbox( "hlae input while gui open", &g_Gui.hlaeInputWhileGui );
+			OT::SliderPercent( "menu opacity", &OT::g_Menu.MenuOpacity, 30, 100 );
+		}
+		OT::EndGroup();
+
+		ImGui::SetCursorScreenPos( ImVec2( col1_x, top_group_y + 210.0f + 10.0f ) );
+		OT::BeginGroup( "logging", col_w, 195.0f );
+		{
+			if ( OT::Button( "flush log to disk" ) )
+				IssueCommand( "art_flush" );
+		}
+		OT::EndGroup();
+
+		// RIGHT COLUMN
+		ImGui::SetCursorScreenPos( ImVec2( col2_x, top_group_y ) );
+		OT::BeginGroup( "experimental features", col_w, 210.0f );
+		{
+			OT::Checkbox( "experimental options enabled", &g_Gui.experimentalOptionsEnabled );
+
+			if ( OT::Checkbox( "pause demo after recording stops", &g_Gui.autoPauseDemoAfterRecording ) )
+				IssueCommand( g_Gui.autoPauseDemoAfterRecording ? "art_demo_pause_after_recording on" : "art_demo_pause_after_recording off" );
+
+			OT::Checkbox( "resume demo on recording start", &g_Gui.autoResumeDemoOnRecordingStart );
+		}
+		OT::EndGroup();
+
+		ImGui::SetCursorScreenPos( ImVec2( col2_x, top_group_y + 210.0f + 10.0f ) );
+		OT::BeginGroup( "quick tools", col_w, 195.0f );
+		{
+			if ( OT::Button( "open output folder" ) )
+				OpenConfiguredOutputDirectory();
+
+			if ( OT::Button( "print full console help" ) )
+				IssueCommandWithSeparator( "art_help" );
+		}
+		OT::EndGroup();
+	}
+
+	void RenderOneTapMenu( bool *p_open )
+	{
+		ImVec2 menu_size( 720.0f, 590.0f );
+
+		if ( !OT::BeginMenuWindow( V34_ART_PRODUCT_NAME " V" V34_ART_VERSION_STRING, p_open, menu_size ) )
+			return;
+
+		static const char *s_Tabs[] = {
+			"capture", "passes", "visuals", "output", "info", "hlae", "configs", "settings"
+		};
+
+		OT::TabBar( s_Tabs, 8, &OT::g_Menu.CurrentTab );
+
+		ImVec2 content_pos, content_size;
+		OT::BeginContentBox( &content_pos, &content_size );
+
+		const float pad_x = 32.0f;
+		const float col_gap = 18.0f;
+		const float col_w = ( content_size.x - pad_x * 2.0f - col_gap ) * 0.5f;
+
+		switch ( OT::g_Menu.CurrentTab )
+		{
+		case 0: RenderCaptureTab( col_w, content_pos ); break;
+		case 1: RenderPassesTab( col_w, content_pos ); break;
+		case 2: RenderVisualsTab( col_w, content_pos ); break;
+		case 3: RenderOutputTab( col_w, content_pos ); break;
+		case 4: RenderInfoTab( col_w, content_pos ); break;
+		case 5: RenderHlaeTab( col_w, content_pos ); break;
+		case 6: RenderConfigsTab( col_w, content_pos ); break;
+		case 7: RenderSettingsTab( col_w, content_pos ); break;
+		default: RenderCaptureTab( col_w, content_pos ); break;
+		}
+
+		OT::EndContentBox();
+		OT::EndMenuWindow();
+	}
+
 	void DrawMainWindow()
 	{
 		OT::InitStyle();
 		bool open = true;
-		OT::RenderMenu( &open );
+		RenderOneTapMenu( &open );
 		if ( !open )
 			SetArtGuiVisible( false );
 	}
