@@ -39,6 +39,18 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler( HWND hWnd, UINT me
 #pragma comment( lib, "d3d9.lib" )
 #pragma comment( lib, "shell32.lib" )
 
+namespace OT
+{
+	Theme g_Theme;
+	int g_ActiveKeybindId = -1;
+	ImVec2 s_ContentBoxPos;
+	ImVec2 s_ContentBoxSize;
+	char s_CurrentGroupTitle[64] = {0};
+	ImVec2 s_GroupStartPos;
+	ImVec2 s_GroupSize;
+	MenuState g_Menu;
+}
+
 // memdbgon must be the last include file in a .cpp file.
 #include "tier0/memdbgon.h"
 
@@ -6608,17 +6620,17 @@ namespace
 		ImGui::SetCursorScreenPos( ImVec2( col1_x, top_group_y + 275.0f + 10.0f ) );
 		OT::BeginGroup( "depth pass setup", col_w, 130.0f );
 		{
-			int d_start = static_cast<int>( g_ArtRecordingStats.depthStart );
+			int d_start = static_cast<int>( art_depth_start.GetFloat() );
 			if ( OT::SliderInt( "depth start", &d_start, 0, 1000 ) )
 			{
-				g_ArtRecordingStats.depthStart = static_cast<float>( d_start );
+				art_depth_start.SetValue( static_cast<float>( d_start ) );
 				IssueCommand( "art_depth_start %d", d_start );
 			}
 
-			int d_end = static_cast<int>( g_ArtRecordingStats.depthEnd );
+			int d_end = static_cast<int>( art_depth_end.GetFloat() );
 			if ( OT::SliderInt( "depth end", &d_end, 100, 8000 ) )
 			{
-				g_ArtRecordingStats.depthEnd = static_cast<float>( d_end );
+				art_depth_end.SetValue( static_cast<float>( d_end ) );
 				IssueCommand( "art_depth_end %d", d_end );
 			}
 		}
@@ -6774,15 +6786,17 @@ namespace
 		OT::BeginGroup( "recording pipeline", col_w, 205.0f );
 		{
 			static const char *output_modes[] = { "tga image sequence", "ffmpeg direct pipe" };
-			int modeIdx = ( g_ArtOutputMode == ART_OUTPUT_MODE_FFMPEG ) ? 1 : 0;
+			LONG currentOutputMode = InterlockedCompareExchange( &g_nArtOutputMode, 0, 0 );
+			int modeIdx = ( currentOutputMode == ART_OUTPUT_MODE_FFMPEG ) ? 1 : 0;
 			if ( OT::Combo( "pipeline mode", &modeIdx, output_modes, 2 ) )
 				IssueCommand( "art_output_mode %s", modeIdx == 1 ? "ffmpeg" : "tga" );
 
-			bool rle = ( g_ArtTgaCompression == ART_TGA_COMPRESSION_RLE );
+			LONG compressionMode = InterlockedCompareExchange( &g_nArtTgaCompressionMode, 0, 0 );
+			bool rle = ( compressionMode == ART_TGA_COMPRESSION_RLE );
 			if ( OT::Checkbox( "tga rle compression", &rle ) )
 				IssueCommand( "art_tga_compression %s", rle ? "rle" : "none" );
 
-			bool manifest = InterlockedCompareExchange( &g_bTakeJsonEnabled, FALSE, FALSE ) != FALSE;
+			bool manifest = InterlockedCompareExchange( &g_bArtTakeManifestEnabled, FALSE, FALSE ) != FALSE;
 			if ( OT::Checkbox( "take json manifest", &manifest ) )
 				IssueCommand( "art_take_json %s", manifest ? "on" : "off" );
 		}
@@ -6791,8 +6805,14 @@ namespace
 		ImGui::SetCursorScreenPos( ImVec2( col1_x, top_group_y + 205.0f + 10.0f ) );
 		OT::BeginGroup( "queue & memory", col_w, 200.0f );
 		{
-			OT::SliderInt( "max queue files", &OT::g_Menu.QueueFiles, 50, 5000 );
-			OT::SliderInt( "max queue memory", &OT::g_Menu.QueueMb, 64, 2048, " mb" );
+			int maxFiles = static_cast<int>( InterlockedCompareExchange( &g_ArtQueueOptions.maxFiles, 0, 0 ) );
+			if ( OT::SliderInt( "max queue files", &maxFiles, 50, 5000 ) )
+				IssueCommand( "art_queue files %d", maxFiles );
+
+			int maxMb = static_cast<int>( InterlockedCompareExchange( &g_ArtQueueOptions.maxMegabytes, 0, 0 ) );
+			if ( OT::SliderInt( "max queue memory", &maxMb, 64, 2048, " mb" ) )
+				IssueCommand( "art_queue mb %d", maxMb );
+
 			if ( OT::Button( "flush writer queue" ) )
 				IssueCommand( "art_flush" );
 		}
@@ -6895,8 +6915,11 @@ namespace
 		const float col1_x = content_pos.x + pad_x;
 		const float col2_x = col1_x + col_w + col_gap;
 
+		ArtHlaeStatus hlaeStatus = GetArtHlaeStatus();
+		bool hlaeEnable = hlaeStatus.enabled;
 		ImGui::SetCursorScreenPos( ImVec2( col1_x, content_pos.y + pad_y ) );
-		OT::Checkbox( "enable hlae features", &OT::g_Menu.HlaeEnable );
+		if ( OT::Checkbox( "enable hlae features", &hlaeEnable ) )
+			IssueCommand( "art_hlae enabled %d", hlaeEnable ? 1 : 0 );
 
 		const float top_group_y = content_pos.y + pad_y + 14.0f + 10.0f;
 
@@ -6904,7 +6927,7 @@ namespace
 		ImGui::SetCursorScreenPos( ImVec2( col1_x, top_group_y ) );
 		OT::BeginGroup( "camera path (campath)", col_w, 220.0f );
 		{
-			bool cpDraw = InterlockedCompareExchange( &g_Hlae.campathDraw, FALSE, FALSE ) != FALSE;
+			bool cpDraw = hlaeStatus.campathDraw;
 			if ( OT::Checkbox( "draw camera path", &cpDraw ) )
 				IssueCommand( "mirv_campath draw enabled %d", cpDraw ? 1 : 0 );
 
@@ -7668,7 +7691,7 @@ namespace
 		ImGui_ImplDX9_NewFrame();
 		ImGui_ImplWin32_NewFrame();
 		ImGui::NewFrame();
-		OT::ProcessRecordingKeybinds();
+		ProcessRecordingKeybinds();
 		if ( mainVisible )
 		{
 			DrawMainWindow();

@@ -6,7 +6,15 @@
 #include <string>
 #include <vector>
 #include <algorithm>
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 #include <windows.h>
+#endif
 
 namespace OT {
 
@@ -26,8 +34,8 @@ struct Theme {
     ImVec4 TextInactive = ImVec4(115.0f / 255.0f, 115.0f / 255.0f, 115.0f / 255.0f, 1.0f);
 };
 
-inline Theme g_Theme;
-inline int g_ActiveKeybindId = -1;
+extern Theme g_Theme;
+extern int g_ActiveKeybindId;
 
 inline void InitStyle() {
     ImGuiStyle& style = ImGui::GetStyle();
@@ -172,8 +180,8 @@ inline bool TabBar(const char* const tabs[], int count, int* current_tab) {
     return changed;
 }
 
-inline ImVec2 s_ContentBoxPos;
-inline ImVec2 s_ContentBoxSize;
+extern ImVec2 s_ContentBoxPos;
+extern ImVec2 s_ContentBoxSize;
 
 inline void BeginContentBox(ImVec2* out_pos = nullptr, ImVec2* out_size = nullptr) {
     ImDrawList* draw = ImGui::GetWindowDrawList();
@@ -211,9 +219,9 @@ inline void GetGroupMetrics(float& base_x, float& col_w) {
     }
 }
 
-inline char s_CurrentGroupTitle[64] = {0};
-inline ImVec2 s_GroupStartPos;
-inline ImVec2 s_GroupSize;
+extern char s_CurrentGroupTitle[64];
+extern ImVec2 s_GroupStartPos;
+extern ImVec2 s_GroupSize;
 
 inline void BeginGroup(const char* title, float width, float height) {
     ImVec2 pos = ImGui::GetCursorScreenPos();
@@ -531,7 +539,7 @@ inline bool SliderInt(const char* label, int* val, int min_val, int max_val, con
     bool minus_hovered, minus_held;
     if (ImGui::ButtonBehavior(minus_bb, minus_id, &minus_hovered, &minus_held)) {
         if (*val > min_val) {
-            *val = std::max(min_val, *val - 1);
+            *val = (*val - 1 < min_val) ? min_val : (*val - 1);
             ImGui::MarkItemEdited(id);
         }
     }
@@ -540,7 +548,7 @@ inline bool SliderInt(const char* label, int* val, int min_val, int max_val, con
     bool plus_hovered, plus_held;
     if (ImGui::ButtonBehavior(plus_bb, plus_id, &plus_hovered, &plus_held)) {
         if (*val < max_val) {
-            *val = std::min(max_val, *val + 1);
+            *val = (*val + 1 > max_val) ? max_val : (*val + 1);
             ImGui::MarkItemEdited(id);
         }
     }
@@ -549,7 +557,9 @@ inline bool SliderInt(const char* label, int* val, int min_val, int max_val, con
     ImGui::ButtonBehavior(track_bb, id, &track_hovered, &track_held);
     if (track_held) {
         float mouse_x = g.IO.MousePos.x;
-        float norm = std::clamp((mouse_x - track_bb.Min.x) / (track_bb.Max.x - track_bb.Min.x), 0.0f, 1.0f);
+        float norm = (track_bb.Max.x > track_bb.Min.x) ? ((mouse_x - track_bb.Min.x) / (track_bb.Max.x - track_bb.Min.x)) : 0.0f;
+        if (norm < 0.0f) norm = 0.0f;
+        else if (norm > 1.0f) norm = 1.0f;
         *val = min_val + (int)(norm * (max_val - min_val) + 0.5f);
         ImGui::MarkItemEdited(id);
     }
@@ -563,7 +573,8 @@ inline bool SliderInt(const char* label, int* val, int min_val, int max_val, con
     draw->AddRect(track_bb.Min, track_bb.Max, IM_COL32(42, 42, 42, 255));
 
     float frac = (max_val > min_val) ? (float)(*val - min_val) / (float)(max_val - min_val) : 0.0f;
-    frac = std::clamp(frac, 0.0f, 1.0f);
+    if (frac < 0.0f) frac = 0.0f;
+    else if (frac > 1.0f) frac = 1.0f;
     float fill_w = frac * (track_bb.Max.x - track_bb.Min.x);
 
     if (fill_w > 0.0f) {
@@ -771,6 +782,33 @@ inline bool Keybind(const char* label, int* key, int* mode) {
     return true;
 }
 
+#ifndef _WIN32
+#define VK_LBUTTON 0x01
+#define VK_RBUTTON 0x02
+#define VK_MBUTTON 0x04
+#define VK_XBUTTON1 0x05
+#define VK_XBUTTON2 0x06
+#define VK_BACK 0x08
+#define VK_TAB 0x09
+#define VK_RETURN 0x0D
+#define VK_SHIFT 0x10
+#define VK_CONTROL 0x11
+#define VK_MENU 0x12
+#define VK_ESCAPE 0x1B
+#define VK_SPACE 0x20
+#define VK_PRIOR 0x21
+#define VK_NEXT 0x22
+#define VK_END 0x23
+#define VK_HOME 0x24
+#define VK_LEFT 0x25
+#define VK_UP 0x26
+#define VK_RIGHT 0x27
+#define VK_DOWN 0x28
+#define VK_INSERT 0x2D
+#define VK_DELETE 0x2E
+#define VK_F1 0x70
+#endif
+
 inline int ImGuiKeyToVK(int key) {
     if (key <= 0) return 0;
     if (key >= 1 && key <= 5) {
@@ -813,7 +851,11 @@ struct KeybindSetting {
         int vk = ImGuiKeyToVK(key);
         if (vk <= 0) return false;
 
+#ifdef _WIN32
         bool currently_down = (GetAsyncKeyState(vk) & 0x8000) != 0;
+#else
+        bool currently_down = false;
+#endif
         bool just_pressed = currently_down && !was_down;
         was_down = currently_down;
 
@@ -829,7 +871,11 @@ struct KeybindSetting {
         if (mode != 0) return false;
         int vk = ImGuiKeyToVK(key);
         if (vk <= 0) return false;
+#ifdef _WIN32
         bool currently_down = (GetAsyncKeyState(vk) & 0x8000) != 0;
+#else
+        bool currently_down = false;
+#endif
         bool just_released = !currently_down && was_down;
         return just_released;
     }
@@ -884,6 +930,6 @@ struct MenuState {
     int MenuOpacity = 100;
 };
 
-inline MenuState g_Menu;
+extern MenuState g_Menu;
 
 } // namespace OT
