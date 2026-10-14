@@ -7145,8 +7145,16 @@ namespace
 		OT::EndMenuWindow();
 	}
 
+	volatile LONG g_bUseLegacyMenu = FALSE;
+
 	void DrawMainWindow()
 	{
+		if ( InterlockedCompareExchange( &g_bUseLegacyMenu, FALSE, FALSE ) )
+		{
+			DrawMainWindowLegacy();
+			return;
+		}
+
 		OT::InitStyle();
 		bool open = true;
 		RenderOneTapMenu( &open );
