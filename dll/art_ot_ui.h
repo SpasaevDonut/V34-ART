@@ -223,6 +223,8 @@ inline void BeginContentBox(ImVec2* out_pos = nullptr, ImVec2* out_size = nullpt
 inline void EndContentBox() {
     ImDrawList* draw = ImGui::GetWindowDrawList();
     draw->AddRect(s_ContentBoxPos, ImVec2(s_ContentBoxPos.x + s_ContentBoxSize.x, s_ContentBoxPos.y + s_ContentBoxSize.y), IM_COL32(38, 38, 38, 255));
+    ImGui::SetCursorScreenPos(ImVec2(s_ContentBoxPos.x, s_ContentBoxPos.y + s_ContentBoxSize.y));
+    ImGui::Dummy(ImVec2(s_ContentBoxSize.x, 0.0f));
 }
 
 extern char s_CurrentGroupTitle[64];
@@ -283,7 +285,8 @@ inline void EndGroup() {
         draw->AddRect(min_p, max_p, border_col);
     }
 
-    ImGui::SetCursorScreenPos(ImVec2(min_p.x, max_p.y + 12.0f));
+    float extra_gap = (final_h > content_h) ? (final_h - content_h) : 0.0f;
+    ImGui::Dummy(ImVec2(s_GroupWidth, extra_gap + 12.0f));
     s_GroupWidth = 0.0f;
 }
 
@@ -300,9 +303,19 @@ inline void Label(const char* label, const char* value = nullptr) {
     ImDrawList* draw = window->DrawList;
 
     if (value && value[0] != '\0') {
-        draw->AddText(ImVec2(content_x, y), IM_COL32(150, 150, 150, 255), label);
+        ImVec2 lbl_size = ImGui::CalcTextSize(label);
         ImVec2 val_size = ImGui::CalcTextSize(value);
-        draw->AddText(ImVec2(right_x - val_size.x, y), IM_COL32(220, 220, 220, 255), value);
+        float val_x = right_x - val_size.x;
+        if (val_x < content_x + lbl_size.x + 8.0f) {
+            draw->AddText(ImVec2(content_x, y), IM_COL32(150, 150, 150, 255), label);
+            float v_x = (right_x - val_size.x > content_x) ? (right_x - val_size.x) : content_x;
+            draw->AddText(ImVec2(v_x, y + 14.0f), IM_COL32(220, 220, 220, 255), value);
+            ImGui::Dummy(ImVec2(0, 28.0f));
+            return;
+        } else {
+            draw->AddText(ImVec2(content_x, y), IM_COL32(150, 150, 150, 255), label);
+            draw->AddText(ImVec2(val_x, y), IM_COL32(220, 220, 220, 255), value);
+        }
     } else {
         draw->AddText(ImVec2(content_x, y), IM_COL32(210, 210, 210, 255), label);
     }

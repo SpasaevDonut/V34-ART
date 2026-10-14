@@ -6648,9 +6648,6 @@ namespace
 				StopDemoPlayerAutoRefresh();
 				RefreshDemoPlayerList();
 			}
-
-			if ( OT::Button( "refresh demos list" ) )
-				RefreshDemoList();
 		}
 		OT::EndGroup();
 	}
