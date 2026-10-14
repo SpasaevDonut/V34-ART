@@ -223,8 +223,8 @@ inline void BeginContentBox(ImVec2* out_pos = nullptr, ImVec2* out_size = nullpt
 inline void EndContentBox() {
     ImDrawList* draw = ImGui::GetWindowDrawList();
     draw->AddRect(s_ContentBoxPos, ImVec2(s_ContentBoxPos.x + s_ContentBoxSize.x, s_ContentBoxPos.y + s_ContentBoxSize.y), IM_COL32(38, 38, 38, 255));
-    ImGui::SetCursorScreenPos(ImVec2(s_ContentBoxPos.x, s_ContentBoxPos.y + s_ContentBoxSize.y));
-    ImGui::Dummy(ImVec2(s_ContentBoxSize.x, 0.0f));
+    ImGui::SetCursorScreenPos(ImVec2(s_ContentBoxPos.x + s_ContentBoxSize.x, s_ContentBoxPos.y + s_ContentBoxSize.y));
+    ImGui::Dummy(ImVec2(0.0f, 0.0f));
 }
 
 extern char s_CurrentGroupTitle[64];
@@ -285,8 +285,7 @@ inline void EndGroup() {
         draw->AddRect(min_p, max_p, border_col);
     }
 
-    float extra_gap = (final_h > content_h) ? (final_h - content_h) : 0.0f;
-    ImGui::Dummy(ImVec2(s_GroupWidth, extra_gap + 12.0f));
+    ImGui::SetCursorScreenPos(ImVec2(min_p.x, max_p.y + 12.0f));
     s_GroupWidth = 0.0f;
 }
 
