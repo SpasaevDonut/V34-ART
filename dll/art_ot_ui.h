@@ -216,45 +216,48 @@ inline void EndContentBox() {
     draw->AddRect(s_ContentBoxPos, ImVec2(s_ContentBoxPos.x + s_ContentBoxSize.x, s_ContentBoxPos.y + s_ContentBoxSize.y), IM_COL32(36, 36, 36, 255));
 }
 
+extern char s_CurrentGroupTitle[64];
+extern ImVec2 s_GroupStartPos;
+extern ImVec2 s_GroupSize;
+extern float s_GroupWidth;
+extern float s_GroupRequestedHeight;
+
 inline void GetGroupMetrics(float& base_x, float& col_w) {
-    ImGuiWindow* window = ImGui::GetCurrentWindow();
-    if (window->ParentWindow != nullptr) {
-        base_x = window->Pos.x;
-        col_w = window->Size.x;
+    if (s_GroupWidth > 0.0f) {
+        base_x = s_GroupStartPos.x;
+        col_w = s_GroupWidth;
     } else {
+        ImGuiWindow* window = ImGui::GetCurrentWindow();
         base_x = window->DC.CursorPos.x;
         col_w = 200.0f;
     }
 }
 
-extern char s_CurrentGroupTitle[64];
-extern ImVec2 s_GroupStartPos;
-extern ImVec2 s_GroupSize;
-
-inline void BeginGroup(const char* title, float width, float height) {
-    ImVec2 pos = ImGui::GetCursorScreenPos();
-    s_GroupStartPos = pos;
-    s_GroupSize = ImVec2(width, height);
+inline void BeginGroup(const char* title, float width, float height = 0.0f) {
+    s_GroupStartPos = ImGui::GetCursorScreenPos();
+    s_GroupWidth = width;
+    s_GroupRequestedHeight = height;
     if (title)
         snprintf(s_CurrentGroupTitle, sizeof(s_CurrentGroupTitle), "%s", title);
     else
         s_CurrentGroupTitle[0] = '\0';
 
-    char child_id[128];
-    snprintf(child_id, sizeof(child_id), "##group_%s_%f", title ? title : "", pos.y);
-    ImGui::BeginChild(child_id, s_GroupSize, false, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-
-    ImGui::SetCursorPos(ImVec2(0.0f, 14.0f));
+    ImGui::BeginGroup();
+    ImGui::Dummy(ImVec2(width, 10.0f));
 }
 
 inline void EndGroup() {
-    ImGui::EndChild();
+    ImGui::Dummy(ImVec2(s_GroupWidth, 6.0f));
+    ImGui::EndGroup();
 
-    ImDrawList* draw = ImGui::GetWindowDrawList();
     ImVec2 min_p = s_GroupStartPos;
-    ImVec2 max_p = ImVec2(min_p.x + s_GroupSize.x, min_p.y + s_GroupSize.y);
+    ImVec2 item_max = ImGui::GetItemRectMax();
+    float content_h = item_max.y - min_p.y;
+    float final_h = (s_GroupRequestedHeight > 0.0f) ? s_GroupRequestedHeight : content_h;
+    ImVec2 max_p = ImVec2(min_p.x + s_GroupWidth, min_p.y + final_h);
     ImU32 border_col = ImColor(g_Theme.GroupBorder);
 
+    ImDrawList* draw = ImGui::GetWindowDrawList();
     if (s_CurrentGroupTitle[0] != '\0') {
         ImVec2 text_size = ImGui::CalcTextSize(s_CurrentGroupTitle);
         ImVec2 title_pos = ImVec2(min_p.x + 16.0f, min_p.y - 6.0f);
@@ -270,6 +273,9 @@ inline void EndGroup() {
     } else {
         draw->AddRect(min_p, max_p, border_col);
     }
+
+    ImGui::SetCursorScreenPos(ImVec2(min_p.x, max_p.y + 12.0f));
+    s_GroupWidth = 0.0f;
 }
 
 inline void Label(const char* label, const char* value = nullptr) {
@@ -606,6 +612,20 @@ inline bool Combo(const char* label, int* current_item, const char* const items[
     return value_changed;
 }
 
+inline bool Combo(const char* label, int* current_item, const std::vector<std::string>& items) {
+    if (items.empty()) {
+        static const char* empty_item[] = { "no demos found" };
+        int dummy = 0;
+        return Combo(label, &dummy, empty_item, 1);
+    }
+    std::vector<const char*> item_ptrs;
+    item_ptrs.reserve(items.size());
+    for (size_t i = 0; i < items.size(); ++i) {
+        item_ptrs.push_back(items[i].c_str());
+    }
+    return Combo(label, current_item, item_ptrs.data(), (int)item_ptrs.size());
+}
+
 inline bool SliderInt(const char* label, int* val, int min_val, int max_val, const char* suffix = "") {
     ImGuiWindow* window = ImGui::GetCurrentWindow();
     if (window->SkipItems) return false;
@@ -630,38 +650,32 @@ inline bool SliderInt(const char* label, int* val, int min_val, int max_val, con
 
     ImRect minus_bb(ImVec2(content_x, y), ImVec2(content_x + 10.0f, y + height));
     ImRect plus_bb(ImVec2(right_x - 10.0f, y), ImVec2(right_x, y + height));
-    ImRect track_bb(ImVec2(content_x + 14.0f, y + 3.0f), ImVec2(right_x - 14.0f, y + 10.0f));
+    ImRect track_bb(ImVec2(content_x + 14.0f, y + 2.0f), ImVec2(right_x - 14.0f, y + height - 2.0f));
 
     const ImRect total_bb(ImVec2(content_x, y), ImVec2(right_x, y + height));
     ImGui::ItemSize(total_bb, 0.0f);
-    if (!ImGui::ItemAdd(total_bb, id)) return false;
+    if (!ImGui::ItemAdd(total_bb, id, &track_bb, ImGuiItemFlags_Inputable)) return false;
 
-    static ImGuiID s_ActiveInputSliderId = 0;
-    static char s_SliderInputBuf[32] = {0};
-    bool value_edited = false;
-
-    if (s_ActiveInputSliderId == id) {
-        ImGui::SetCursorScreenPos(ImVec2(content_x + 14.0f, y - 2.0f));
-        ImGui::SetNextItemWidth(track_bb.Max.x - track_bb.Min.x);
-        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4, 1));
-        char buf_id[64];
-        snprintf(buf_id, sizeof(buf_id), "##sinp_%u", id);
-        if (ImGui::InputText(buf_id, s_SliderInputBuf, sizeof(s_SliderInputBuf), ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CharsDecimal)) {
-            int typed_val = atoi(s_SliderInputBuf);
-            if (typed_val < min_val) typed_val = min_val;
-            if (typed_val > max_val) typed_val = max_val;
-            *val = typed_val;
-            value_edited = true;
-            s_ActiveInputSliderId = 0;
-            ImGui::MarkItemEdited(id);
+    bool temp_input_is_active = ImGui::TempInputIsActive(id);
+    if (!temp_input_is_active) {
+        bool track_hovered = ImGui::ItemHoverable(track_bb, id, g.LastItemData.ItemFlags);
+        const bool clicked = track_hovered && ImGui::IsMouseClicked(0, ImGuiInputFlags_None, id);
+        const bool double_clicked = track_hovered && (g.IO.MouseClickedCount[0] == 2);
+        if ((clicked && g.IO.KeyCtrl) || double_clicked) {
+            temp_input_is_active = true;
+            ImGui::FocusWindow(window);
+            ImGui::SetActiveID(id, window);
+            ImGui::SetFocusID(id, window);
         }
-        if (ImGui::IsItemDeactivated() && !ImGui::IsItemDeactivatedAfterEdit()) {
-            s_ActiveInputSliderId = 0;
-        }
-        ImGui::PopStyleVar();
-        ImGui::Dummy(ImVec2(0, 5.0f));
-        return value_edited;
     }
+
+    if (temp_input_is_active) {
+        bool value_changed = ImGui::TempInputScalar(track_bb, id, label, ImGuiDataType_S32, val, "%d", &min_val, &max_val);
+        ImGui::Dummy(ImVec2(0, 5.0f));
+        return value_changed;
+    }
+
+    bool value_edited = false;
 
     const ImGuiID minus_id = window->GetID((std::string(label) + "_minus").c_str());
     bool minus_hovered, minus_held;
@@ -686,14 +700,7 @@ inline bool SliderInt(const char* label, int* val, int min_val, int max_val, con
     bool track_hovered, track_held;
     ImGui::ButtonBehavior(track_bb, id, &track_hovered, &track_held);
 
-    // Double-click or Ctrl+click to type directly with keyboard!
-    if (track_hovered && (g.IO.KeyCtrl || ImGui::IsMouseDoubleClicked(0))) {
-        s_ActiveInputSliderId = id;
-        snprintf(s_SliderInputBuf, sizeof(s_SliderInputBuf), "%d", *val);
-        ImGui::SetKeyboardFocusHere(-1);
-    }
-
-    if (track_held && s_ActiveInputSliderId != id) {
+    if (track_held) {
         float mouse_x = g.IO.MousePos.x;
         float norm = (track_bb.Max.x > track_bb.Min.x) ? ((mouse_x - track_bb.Min.x) / (track_bb.Max.x - track_bb.Min.x)) : 0.0f;
         if (norm < 0.0f) norm = 0.0f;

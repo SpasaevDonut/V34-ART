@@ -48,6 +48,8 @@ namespace OT
 	char s_CurrentGroupTitle[64] = {0};
 	ImVec2 s_GroupStartPos;
 	ImVec2 s_GroupSize;
+	float s_GroupWidth = 0.0f;
+	float s_GroupRequestedHeight = 0.0f;
 	MenuState g_Menu;
 }
 
@@ -6466,27 +6468,26 @@ namespace
 
 		// LEFT COLUMN
 		ImGui::SetCursorScreenPos( ImVec2( col1_x, top_group_y ) );
-		if ( recording )
+		OT::BeginGroup( "capture session", col_w );
 		{
-			if ( OT::Button( "[ STOP RECORDING (F9) ]", ImVec2( col_w, 28.0f ), IM_COL32( 185, 25, 25, 255 ) ) )
-				IssueCommand( "art_toggle" );
-		}
-		else
-		{
-			if ( OT::Button( "[ START RECORDING (F9) ]", ImVec2( col_w, 28.0f ), IM_COL32( 35, 115, 50, 255 ) ) )
+			if ( recording )
 			{
-				if ( !g_Gui.takeName[0] )
+				if ( OT::Button( "[ STOP RECORDING (F9) ]", ImVec2( 0, 26.0f ), IM_COL32( 185, 25, 25, 255 ) ) )
 					IssueCommand( "art_toggle" );
-				else if ( IsSafeConfigName( g_Gui.takeName ) )
-					IssueCommand( "art_toggle %s", g_Gui.takeName );
-				else
-					SetError( "take name may contain only letters, numbers, '_' and '-'" );
 			}
-		}
+			else
+			{
+				if ( OT::Button( "[ START RECORDING (F9) ]", ImVec2( 0, 26.0f ), IM_COL32( 35, 115, 50, 255 ) ) )
+				{
+					if ( !g_Gui.takeName[0] )
+						IssueCommand( "art_toggle" );
+					else if ( IsSafeConfigName( g_Gui.takeName ) )
+						IssueCommand( "art_toggle %s", g_Gui.takeName );
+					else
+						SetError( "take name may contain only letters, numbers, '_' and '-'" );
+				}
+			}
 
-		ImGui::SetCursorScreenPos( ImVec2( col1_x, top_group_y + 36.0f ) );
-		OT::BeginGroup( "capture session", col_w, 320.0f );
-		{
 			OT::Label( "status:", recording ? "RECORDING" : "IDLE" );
 
 			char frameBuf[32];
@@ -6496,8 +6497,10 @@ namespace
 			const LONG currentOutputMode = InterlockedCompareExchange( &g_nArtOutputMode, 0, 0 );
 			OT::Label( "capture format:", ( currentOutputMode == ART_OUTPUT_MODE_FFMPEG ) ? "FFmpeg direct" : "TGA sequences" );
 
-			ImGui::SetCursorScreenPos( ImVec2( col1_x + 16.0f, ImGui::GetCursorScreenPos().y ) );
-			ImGui::SetNextItemWidth( col_w - 32.0f );
+			float base_x, group_w;
+			OT::GetGroupMetrics( base_x, group_w );
+			ImGui::SetCursorScreenPos( ImVec2( base_x + 16.0f, ImGui::GetCursorScreenPos().y ) );
+			ImGui::SetNextItemWidth( group_w - 32.0f );
 			ImGui::InputTextWithHint( "##take_name", "optional take name", g_Gui.takeName, sizeof( g_Gui.takeName ) );
 			ImGui::Dummy( ImVec2( 0, 5.0f ) );
 
@@ -6526,8 +6529,7 @@ namespace
 		}
 		OT::EndGroup();
 
-		ImGui::SetCursorScreenPos( ImVec2( col1_x, top_group_y + 36.0f + 320.0f + 10.0f ) );
-		OT::BeginGroup( "demo automation", col_w, 335.0f );
+		OT::BeginGroup( "demo automation", col_w );
 		{
 			if ( OT::Checkbox( "unpause demo on rec start", &g_Gui.autoResumeDemoOnRecordingStart ) )
 				IssueCommand( g_Gui.autoResumeDemoOnRecordingStart ? "art_demo_unpause_on_recording on" : "art_demo_unpause_on_recording off" );
@@ -6560,7 +6562,7 @@ namespace
 		const bool pausedDemo = playingDemo && g_pEngine->IsPaused();
 
 		ImGui::SetCursorScreenPos( ImVec2( col2_x, top_group_y ) );
-		OT::BeginGroup( "demo playback", col_w, 355.0f );
+		OT::BeginGroup( "demo playback", col_w );
 		{
 			OT::Label( "playback state:", pausedDemo ? "PAUSED" : ( playingDemo ? "PLAYING" : "NO DEMO" ) );
 
@@ -6570,6 +6572,38 @@ namespace
 			else
 				Q_strncpy( tickBuf, "none", sizeof( tickBuf ) );
 			OT::Label( "current tick:", tickBuf );
+
+			if ( g_Gui.refreshDemos )
+				RefreshDemoList();
+
+			UpdateDemoPlayerAutoRefresh();
+			UpdateDemoTickTracking();
+
+			if ( OT::Combo( "available demos", &g_Gui.selectedDemo, g_Gui.demos ) )
+			{
+				if ( g_Gui.selectedDemo >= 0 && g_Gui.selectedDemo < static_cast<int>( g_Gui.demos.size() ) )
+					Q_strncpy( g_Gui.demoName, g_Gui.demos[g_Gui.selectedDemo].c_str(), sizeof( g_Gui.demoName ) );
+			}
+
+			if ( OT::Button( "load selected demo" ) )
+			{
+				if ( !g_Gui.demoName[0] && g_Gui.selectedDemo >= 0 &&
+					g_Gui.selectedDemo < static_cast<int>( g_Gui.demos.size() ) )
+				{
+					Q_strncpy( g_Gui.demoName, g_Gui.demos[g_Gui.selectedDemo].c_str(), sizeof( g_Gui.demoName ) );
+				}
+				LoadDemoFromField();
+			}
+
+			if ( OT::Button( "refresh demos list" ) )
+				RefreshDemoList();
+
+			float r_base_x, r_group_w;
+			OT::GetGroupMetrics( r_base_x, r_group_w );
+			ImGui::SetCursorScreenPos( ImVec2( r_base_x + 16.0f, ImGui::GetCursorScreenPos().y ) );
+			ImGui::SetNextItemWidth( r_group_w - 32.0f );
+			ImGui::InputTextWithHint( "##demo_name", "or type demo name / path", g_Gui.demoName, sizeof( g_Gui.demoName ) );
+			ImGui::Dummy( ImVec2( 0, 5.0f ) );
 
 			if ( OT::Button( pausedDemo ? "resume demo playback" : "pause demo playback" ) )
 				ToggleDemoPlayback( pausedDemo );
@@ -6586,8 +6620,7 @@ namespace
 		}
 		OT::EndGroup();
 
-		ImGui::SetCursorScreenPos( ImVec2( col2_x, top_group_y + 355.0f + 10.0f ) );
-		OT::BeginGroup( "spectator & camera", col_w, 335.0f );
+		OT::BeginGroup( "spectator & camera", col_w );
 		{
 			if ( OT::Button( "spectate selected player" ) )
 				SpectateSelectedDemoPlayer();
@@ -6632,7 +6665,7 @@ namespace
 
 		// LEFT COLUMN
 		ImGui::SetCursorScreenPos( ImVec2( col1_x, top_group_y ) );
-		OT::BeginGroup( "capture passes & hud", col_w, 400.0f );
+		OT::BeginGroup( "capture passes & hud", col_w );
 		{
 			LONG recordMask = InterlockedCompareExchange( &g_nRecordMask, 0, 0 );
 			LONG hudMask = InterlockedCompareExchange( &g_nHudMask, 0, 0 );
@@ -6666,8 +6699,7 @@ namespace
 		}
 		OT::EndGroup();
 
-		ImGui::SetCursorScreenPos( ImVec2( col1_x, top_group_y + 400.0f + 10.0f ) );
-		OT::BeginGroup( "players pass options", col_w, 290.0f );
+		OT::BeginGroup( "players pass options", col_w );
 		{
 			bool playersThroughWalls = InterlockedCompareExchange( &g_bPlayersPassThroughWalls, FALSE, FALSE ) != FALSE;
 			if ( OT::Checkbox( "render players through walls", &playersThroughWalls ) )
@@ -6684,7 +6716,7 @@ namespace
 
 		// RIGHT COLUMN
 		ImGui::SetCursorScreenPos( ImVec2( col2_x, top_group_y ) );
-		OT::BeginGroup( "depth pass extraction", col_w, 390.0f );
+		OT::BeginGroup( "depth pass extraction", col_w );
 		{
 			LONG currentDepthMode = InterlockedCompareExchange( &g_nArtDepthMode, 0, 0 );
 			int depthModeIndex = ( currentDepthMode == ART_DEPTH_MODE_D3D9 ) ? 1 : 0;
@@ -6750,8 +6782,7 @@ namespace
 		}
 		OT::EndGroup();
 
-		ImGui::SetCursorScreenPos( ImVec2( col2_x, top_group_y + 390.0f + 10.0f ) );
-		OT::BeginGroup( "pass colors", col_w, 300.0f );
+		OT::BeginGroup( "pass colors", col_w );
 		{
 			float vm_col[4] = { g_nViewmodelBackgroundRed / 255.0f, g_nViewmodelBackgroundGreen / 255.0f, g_nViewmodelBackgroundBlue / 255.0f, 1.0f };
 			if ( OT::CheckboxColor( "viewmodel background", &OT::g_Menu.VmBgActive, vm_col ) )
@@ -6788,7 +6819,7 @@ namespace
 
 		// LEFT COLUMN
 		ImGui::SetCursorScreenPos( ImVec2( col1_x, top_group_y ) );
-		OT::BeginGroup( "field of view & camera", col_w, 360.0f );
+		OT::BeginGroup( "field of view & camera", col_w );
 		{
 			bool override_fov = InterlockedCompareExchange( &g_bGlobalFovOverride, FALSE, FALSE ) != FALSE;
 			if ( OT::Checkbox( "override global fov", &override_fov ) )
@@ -6814,8 +6845,7 @@ namespace
 		}
 		OT::EndGroup();
 
-		ImGui::SetCursorScreenPos( ImVec2( col1_x, top_group_y + 360.0f + 10.0f ) );
-		OT::BeginGroup( "model visibility", col_w, 330.0f );
+		OT::BeginGroup( "model visibility", col_w );
 		{
 			bool viewmodelVisible = InterlockedCompareExchange( &g_bViewmodelVisible, FALSE, FALSE ) != FALSE;
 			if ( OT::Checkbox( "viewmodel visible", &viewmodelVisible ) )
@@ -6832,7 +6862,7 @@ namespace
 
 		// RIGHT COLUMN
 		ImGui::SetCursorScreenPos( ImVec2( col2_x, top_group_y ) );
-		OT::BeginGroup( "visual overrides", col_w, 360.0f );
+		OT::BeginGroup( "visual overrides", col_w );
 		{
 			bool no_flash = InterlockedCompareExchange( &g_bNoFlashEnabled, FALSE, FALSE ) != FALSE;
 			if ( OT::Checkbox( "no flash effect", &no_flash ) )
@@ -6854,8 +6884,7 @@ namespace
 		}
 		OT::EndGroup();
 
-		ImGui::SetCursorScreenPos( ImVec2( col2_x, top_group_y + 360.0f + 10.0f ) );
-		OT::BeginGroup( "flat chams", col_w, 330.0f );
+		OT::BeginGroup( "flat chams", col_w );
 		{
 			bool pl_chams = InterlockedCompareExchange( &g_bPlayerChamsEnabled, FALSE, FALSE ) != FALSE;
 			float pl_col[4] = { g_nPlayerChamsRed / 255.0f, g_nPlayerChamsGreen / 255.0f, g_nPlayerChamsBlue / 255.0f, 1.0f };
@@ -6898,7 +6927,7 @@ namespace
 
 		// LEFT COLUMN
 		ImGui::SetCursorScreenPos( ImVec2( col1_x, top_group_y ) );
-		OT::BeginGroup( "capture pipeline", col_w, 360.0f );
+		OT::BeginGroup( "capture pipeline", col_w );
 		{
 			static const char *output_modes[] = { "tga image sequence", "ffmpeg direct pipe" };
 			LONG currentOutputMode = InterlockedCompareExchange( &g_nArtOutputMode, 0, 0 );
@@ -6923,8 +6952,7 @@ namespace
 		}
 		OT::EndGroup();
 
-		ImGui::SetCursorScreenPos( ImVec2( col1_x, top_group_y + 360.0f + 10.0f ) );
-		OT::BeginGroup( "queue & memory safety", col_w, 330.0f );
+		OT::BeginGroup( "queue & memory safety", col_w );
 		{
 			int maxFiles = static_cast<int>( InterlockedCompareExchange( &g_ArtQueueOptions.maxFiles, 0, 0 ) );
 			if ( OT::SliderInt( "max queued files", &maxFiles, 50, 5000 ) )
@@ -6948,7 +6976,7 @@ namespace
 
 		// RIGHT COLUMN
 		ImGui::SetCursorScreenPos( ImVec2( col2_x, top_group_y ) );
-		OT::BeginGroup( "ffmpeg video encoding", col_w, 360.0f );
+		OT::BeginGroup( "ffmpeg video encoding", col_w );
 		{
 			char resolvedPath[MAX_PATH];
 			bool foundOnDisk = false;
@@ -6973,8 +7001,7 @@ namespace
 		}
 		OT::EndGroup();
 
-		ImGui::SetCursorScreenPos( ImVec2( col2_x, top_group_y + 360.0f + 10.0f ) );
-		OT::BeginGroup( "takes explorer", col_w, 330.0f );
+		OT::BeginGroup( "takes explorer", col_w );
 		{
 			if ( OT::Button( "open selected take folder" ) )
 				OpenSelectedTake();
@@ -7005,7 +7032,7 @@ namespace
 
 		// LEFT COLUMN
 		ImGui::SetCursorScreenPos( ImVec2( col1_x, top_group_y ) );
-		OT::BeginGroup( "session & take", col_w, 360.0f );
+		OT::BeginGroup( "session & take", col_w );
 		{
 			const bool recording = InterlockedCompareExchange( &g_bRecording, FALSE, FALSE ) != FALSE;
 			OT::Label( "recorder state:", recording ? "RECORDING" : "IDLE" );
@@ -7033,8 +7060,7 @@ namespace
 		}
 		OT::EndGroup();
 
-		ImGui::SetCursorScreenPos( ImVec2( col1_x, top_group_y + 360.0f + 10.0f ) );
-		OT::BeginGroup( "timing statistics", col_w, 330.0f );
+		OT::BeginGroup( "timing statistics", col_w );
 		{
 			char renBuf[32], rdBuf[32], encBuf[32], wrBuf[32], qBuf[32];
 			Q_snprintf( renBuf, sizeof( renBuf ), "%.2f ms", g_ArtPipelineStats.stages[0].takeSamples ? static_cast<double>( g_ArtPipelineStats.stages[0].takeTotalMicroseconds ) / g_ArtPipelineStats.stages[0].takeSamples / 1000.0 : 0.0 );
@@ -7053,7 +7079,7 @@ namespace
 
 		// RIGHT COLUMN
 		ImGui::SetCursorScreenPos( ImVec2( col2_x, top_group_y ) );
-		OT::BeginGroup( "platform & engine", col_w, 360.0f );
+		OT::BeginGroup( "platform & engine", col_w );
 		{
 			OT::Label( "game engine:", "CS:S v34 Build 4044" );
 			OT::Label( "graphics api:", "Direct3D 9 (x86)" );
@@ -7068,8 +7094,7 @@ namespace
 		}
 		OT::EndGroup();
 
-		ImGui::SetCursorScreenPos( ImVec2( col2_x, top_group_y + 360.0f + 10.0f ) );
-		OT::BeginGroup( "about v34-art", col_w, 330.0f );
+		OT::BeginGroup( "about v34-art", col_w );
 		{
 			OT::Label( "product name:", V34_ART_PRODUCT_NAME );
 			OT::Label( "version:", V34_ART_VERSION_STRING );
@@ -7095,7 +7120,7 @@ namespace
 
 		// LEFT COLUMN
 		ImGui::SetCursorScreenPos( ImVec2( col1_x, top_group_y ) );
-		OT::BeginGroup( "master & auto-export", col_w, 360.0f );
+		OT::BeginGroup( "master & auto-export", col_w );
 		{
 			bool hlaeEnable = hlaeStatus.enabled;
 			if ( OT::Checkbox( "enable hlae globally", &hlaeEnable ) )
@@ -7115,8 +7140,7 @@ namespace
 		}
 		OT::EndGroup();
 
-		ImGui::SetCursorScreenPos( ImVec2( col1_x, top_group_y + 360.0f + 10.0f ) );
-		OT::BeginGroup( "campath evaluation", col_w, 330.0f );
+		OT::BeginGroup( "campath evaluation", col_w );
 		{
 			bool cpEnabled = hlaeStatus.campathEnabled;
 			if ( OT::Checkbox( "campath enabled", &cpEnabled ) )
@@ -7148,7 +7172,7 @@ namespace
 
 		// RIGHT COLUMN
 		ImGui::SetCursorScreenPos( ImVec2( col2_x, top_group_y ) );
-		OT::BeginGroup( "campath keyframes", col_w, 360.0f );
+		OT::BeginGroup( "campath keyframes", col_w );
 		{
 			char keyBuf[32];
 			Q_snprintf( keyBuf, sizeof( keyBuf ), "%u", static_cast<unsigned int>( hlaeStatus.campathKeyframes ) );
@@ -7169,8 +7193,7 @@ namespace
 		}
 		OT::EndGroup();
 
-		ImGui::SetCursorScreenPos( ImVec2( col2_x, top_group_y + 360.0f + 10.0f ) );
-		OT::BeginGroup( "file exports", col_w, 330.0f );
+		OT::BeginGroup( "file exports", col_w );
 		{
 			if ( OT::Button( "start AGR recording" ) )
 				IssueCommand( "mirv_agr start afxGameRecord.agr" );
@@ -7203,7 +7226,7 @@ namespace
 
 		// LEFT COLUMN
 		ImGui::SetCursorScreenPos( ImVec2( col1_x, top_group_y ) );
-		OT::BeginGroup( "configuration slots", col_w, 360.0f );
+		OT::BeginGroup( "configuration slots", col_w );
 		{
 			static const char *cfg_slots[] = { "default", "high_fps", "quality_prores", "depth_isolated", "hlae_cinematic" };
 			OT::Combo( "config slot", &OT::g_Menu.ConfigSlot, cfg_slots, 5 );
@@ -7219,8 +7242,7 @@ namespace
 		}
 		OT::EndGroup();
 
-		ImGui::SetCursorScreenPos( ImVec2( col1_x, top_group_y + 360.0f + 10.0f ) );
-		OT::BeginGroup( "reset", col_w, 330.0f );
+		OT::BeginGroup( "reset", col_w );
 		{
 			if ( OT::Button( "reset everything to defaults" ) )
 				ResetEverythingToDefaults();
@@ -7231,7 +7253,7 @@ namespace
 
 		// RIGHT COLUMN
 		ImGui::SetCursorScreenPos( ImVec2( col2_x, top_group_y ) );
-		OT::BeginGroup( "menu theme & accent", col_w, 360.0f );
+		OT::BeginGroup( "menu theme & accent", col_w );
 		{
 			float accent_col[4] = { OT::g_Theme.Accent.x, OT::g_Theme.Accent.y, OT::g_Theme.Accent.z, OT::g_Theme.Accent.w };
 			if ( OT::CheckboxColor( "custom accent color", &OT::g_Menu.AccentDummy, accent_col ) )
@@ -7251,8 +7273,7 @@ namespace
 		}
 		OT::EndGroup();
 
-		ImGui::SetCursorScreenPos( ImVec2( col2_x, top_group_y + 360.0f + 10.0f ) );
-		OT::BeginGroup( "preset management", col_w, 330.0f );
+		OT::BeginGroup( "preset management", col_w );
 		{
 			if ( OT::Button( "save as startup default" ) )
 				SaveConfig( "default" );
@@ -7273,7 +7294,7 @@ namespace
 
 		// LEFT COLUMN
 		ImGui::SetCursorScreenPos( ImVec2( col1_x, top_group_y ) );
-		OT::BeginGroup( "diagnostics & overlay", col_w, 360.0f );
+		OT::BeginGroup( "diagnostics & overlay", col_w );
 		{
 			bool statisticsOverlay = InterlockedCompareExchange( &g_bArtStatisticsOverlayEnabled, FALSE, FALSE ) != FALSE;
 			if ( OT::Checkbox( "in-game statistics overlay", &statisticsOverlay ) )
@@ -7288,8 +7309,7 @@ namespace
 		}
 		OT::EndGroup();
 
-		ImGui::SetCursorScreenPos( ImVec2( col1_x, top_group_y + 360.0f + 10.0f ) );
-		OT::BeginGroup( "tools", col_w, 330.0f );
+		OT::BeginGroup( "tools", col_w );
 		{
 			if ( OT::Button( "open output folder" ) )
 				OpenConfiguredOutputDirectory();
@@ -7301,7 +7321,7 @@ namespace
 
 		// RIGHT COLUMN
 		ImGui::SetCursorScreenPos( ImVec2( col2_x, top_group_y ) );
-		OT::BeginGroup( "experimental features", col_w, 360.0f );
+		OT::BeginGroup( "experimental features", col_w );
 		{
 			bool experimentalOptionsEnabled = g_Gui.experimentalOptionsEnabled;
 			if ( OT::Checkbox( "enable experimental options", &experimentalOptionsEnabled ) )
@@ -7311,8 +7331,7 @@ namespace
 		}
 		OT::EndGroup();
 
-		ImGui::SetCursorScreenPos( ImVec2( col2_x, top_group_y + 360.0f + 10.0f ) );
-		OT::BeginGroup( "about v34-art", col_w, 330.0f );
+		OT::BeginGroup( "about v34-art", col_w );
 		{
 			OT::Label( "product name:", V34_ART_PRODUCT_NAME );
 			OT::Label( "version:", V34_ART_VERSION_STRING );
