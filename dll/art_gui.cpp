@@ -6457,8 +6457,8 @@ namespace
 
 	void RenderCaptureTab( float col_w, ImVec2 content_pos )
 	{
-		const float pad_x = 16.0f;
-		const float col_gap = 14.0f;
+		const float pad_x = 24.0f;
+		const float col_gap = 18.0f;
 		const float col1_x = content_pos.x + pad_x;
 		const float col2_x = col1_x + col_w + col_gap;
 		const float top_group_y = content_pos.y + 14.0f;
@@ -6499,8 +6499,8 @@ namespace
 
 			float base_x, group_w;
 			OT::GetGroupMetrics( base_x, group_w );
-			ImGui::SetCursorScreenPos( ImVec2( base_x + 16.0f, ImGui::GetCursorScreenPos().y ) );
-			ImGui::SetNextItemWidth( group_w - 32.0f );
+			ImGui::SetCursorScreenPos( ImVec2( base_x + 24.0f, ImGui::GetCursorScreenPos().y ) );
+			ImGui::SetNextItemWidth( group_w - 48.0f );
 			ImGui::InputTextWithHint( "##take_name", "optional take name", g_Gui.takeName, sizeof( g_Gui.takeName ) );
 			ImGui::Dummy( ImVec2( 0, 5.0f ) );
 
@@ -6600,8 +6600,8 @@ namespace
 
 			float r_base_x, r_group_w;
 			OT::GetGroupMetrics( r_base_x, r_group_w );
-			ImGui::SetCursorScreenPos( ImVec2( r_base_x + 16.0f, ImGui::GetCursorScreenPos().y ) );
-			ImGui::SetNextItemWidth( r_group_w - 32.0f );
+			ImGui::SetCursorScreenPos( ImVec2( r_base_x + 24.0f, ImGui::GetCursorScreenPos().y ) );
+			ImGui::SetNextItemWidth( r_group_w - 48.0f );
 			ImGui::InputTextWithHint( "##demo_name", "or type demo name / path", g_Gui.demoName, sizeof( g_Gui.demoName ) );
 			ImGui::Dummy( ImVec2( 0, 5.0f ) );
 
@@ -6657,8 +6657,8 @@ namespace
 
 	void RenderPassesTab( float col_w, ImVec2 content_pos )
 	{
-		const float pad_x = 16.0f;
-		const float col_gap = 14.0f;
+		const float pad_x = 24.0f;
+		const float col_gap = 18.0f;
 		const float col1_x = content_pos.x + pad_x;
 		const float col2_x = col1_x + col_w + col_gap;
 		const float top_group_y = content_pos.y + 14.0f;
@@ -6811,8 +6811,8 @@ namespace
 
 	void RenderVisualsTab( float col_w, ImVec2 content_pos )
 	{
-		const float pad_x = 16.0f;
-		const float col_gap = 14.0f;
+		const float pad_x = 24.0f;
+		const float col_gap = 18.0f;
 		const float col1_x = content_pos.x + pad_x;
 		const float col2_x = col1_x + col_w + col_gap;
 		const float top_group_y = content_pos.y + 14.0f;
@@ -6919,8 +6919,8 @@ namespace
 
 	void RenderOutputTab( float col_w, ImVec2 content_pos )
 	{
-		const float pad_x = 16.0f;
-		const float col_gap = 14.0f;
+		const float pad_x = 24.0f;
+		const float col_gap = 18.0f;
 		const float col1_x = content_pos.x + pad_x;
 		const float col2_x = col1_x + col_w + col_gap;
 		const float top_group_y = content_pos.y + 14.0f;
@@ -7024,8 +7024,8 @@ namespace
 
 	void RenderInfoTab( float col_w, ImVec2 content_pos )
 	{
-		const float pad_x = 16.0f;
-		const float col_gap = 14.0f;
+		const float pad_x = 24.0f;
+		const float col_gap = 18.0f;
 		const float col1_x = content_pos.x + pad_x;
 		const float col2_x = col1_x + col_w + col_gap;
 		const float top_group_y = content_pos.y + 14.0f;
@@ -7109,8 +7109,8 @@ namespace
 
 	void RenderHlaeTab( float col_w, ImVec2 content_pos )
 	{
-		const float pad_x = 16.0f;
-		const float col_gap = 14.0f;
+		const float pad_x = 24.0f;
+		const float col_gap = 18.0f;
 		const float col1_x = content_pos.x + pad_x;
 		const float col2_x = col1_x + col_w + col_gap;
 		const float top_group_y = content_pos.y + 14.0f;
@@ -7218,8 +7218,8 @@ namespace
 
 	void RenderConfigsTab( float col_w, ImVec2 content_pos )
 	{
-		const float pad_x = 16.0f;
-		const float col_gap = 14.0f;
+		const float pad_x = 24.0f;
+		const float col_gap = 18.0f;
 		const float col1_x = content_pos.x + pad_x;
 		const float col2_x = col1_x + col_w + col_gap;
 		const float top_group_y = content_pos.y + 14.0f;
@@ -7286,8 +7286,8 @@ namespace
 
 	void RenderSettingsTab( float col_w, ImVec2 content_pos )
 	{
-		const float pad_x = 16.0f;
-		const float col_gap = 14.0f;
+		const float pad_x = 24.0f;
+		const float col_gap = 18.0f;
 		const float col1_x = content_pos.x + pad_x;
 		const float col2_x = col1_x + col_w + col_gap;
 		const float top_group_y = content_pos.y + 14.0f;
@@ -7360,8 +7360,8 @@ namespace
 		ImVec2 content_pos, content_size;
 		OT::BeginContentBox( &content_pos, &content_size );
 
-		const float pad_x = 16.0f;
-		const float col_gap = 14.0f;
+		const float pad_x = 24.0f;
+		const float col_gap = 18.0f;
 		const float col_w = ( content_size.x - pad_x * 2.0f - col_gap ) * 0.5f;
 
 		switch ( OT::g_Menu.CurrentTab )

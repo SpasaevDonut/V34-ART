@@ -19,10 +19,10 @@
 namespace OT {
 
 struct Theme {
-    ImVec4 Accent = ImVec4(77.0f / 255.0f, 123.0f / 255.0f, 255.0f / 255.0f, 1.0f); // #4d7bff (Onetap Blue)
-    ImVec4 WindowBg = ImVec4(14.0f / 255.0f, 14.0f / 255.0f, 14.0f / 255.0f, 0.90f); // 0.9 opacity semi-transparent
-    ImVec4 ContentBg = ImVec4(8.0f / 255.0f, 8.0f / 255.0f, 8.0f / 255.0f, 0.92f);
-    ImVec4 HeaderBg = ImVec4(16.0f / 255.0f, 16.0f / 255.0f, 16.0f / 255.0f, 0.90f);
+    ImVec4 Accent = ImVec4(77.0f / 255.0f, 123.0f / 255.0f, 255.0f / 255.0f, 1.0f); // #4d7bff
+    ImVec4 WindowBg = ImVec4(14.0f / 255.0f, 14.0f / 255.0f, 14.0f / 255.0f, 1.0f);
+    ImVec4 ContentBg = ImVec4(9.0f / 255.0f, 9.0f / 255.0f, 9.0f / 255.0f, 1.0f);
+    ImVec4 HeaderBg = ImVec4(16.0f / 255.0f, 16.0f / 255.0f, 16.0f / 255.0f, 1.0f);
     ImVec4 BorderDark = ImVec4(4.0f / 255.0f, 4.0f / 255.0f, 4.0f / 255.0f, 1.0f);
     ImVec4 BorderLight = ImVec4(54.0f / 255.0f, 54.0f / 255.0f, 54.0f / 255.0f, 1.0f);
     ImVec4 BorderMid = ImVec4(28.0f / 255.0f, 28.0f / 255.0f, 28.0f / 255.0f, 1.0f);
@@ -88,11 +88,17 @@ inline void InitStyle() {
 inline void RenderWindowFrame(ImVec2 pos, ImVec2 size) {
     ImDrawList* draw = ImGui::GetWindowDrawList();
 
+    // Multi-layered classic Onetap borders:
+    // Outer black line
     draw->AddRect(pos, ImVec2(pos.x + size.x, pos.y + size.y), IM_COL32(0, 0, 0, 255));
-    draw->AddRect(ImVec2(pos.x + 1, pos.y + 1), ImVec2(pos.x + size.x - 1, pos.y + size.y - 1), IM_COL32(50, 50, 50, 255));
-    draw->AddRect(ImVec2(pos.x + 2, pos.y + 2), ImVec2(pos.x + size.x - 2, pos.y + size.y - 2), IM_COL32(24, 24, 24, 255));
-    draw->AddRect(ImVec2(pos.x + 3, pos.y + 3), ImVec2(pos.x + size.x - 3, pos.y + size.y - 3), IM_COL32(24, 24, 24, 255));
-    draw->AddRect(ImVec2(pos.x + 4, pos.y + 4), ImVec2(pos.x + size.x - 4, pos.y + size.y - 4), IM_COL32(50, 50, 50, 255));
+    // 1st highlight line
+    draw->AddRect(ImVec2(pos.x + 1, pos.y + 1), ImVec2(pos.x + size.x - 1, pos.y + size.y - 1), IM_COL32(54, 54, 54, 255));
+    // 2px dark gray band
+    draw->AddRect(ImVec2(pos.x + 2, pos.y + 2), ImVec2(pos.x + size.x - 2, pos.y + size.y - 2), IM_COL32(28, 28, 28, 255));
+    draw->AddRect(ImVec2(pos.x + 3, pos.y + 3), ImVec2(pos.x + size.x - 3, pos.y + size.y - 3), IM_COL32(28, 28, 28, 255));
+    // 2nd highlight line
+    draw->AddRect(ImVec2(pos.x + 4, pos.y + 4), ImVec2(pos.x + size.x - 4, pos.y + size.y - 4), IM_COL32(56, 56, 56, 255));
+    // Inner black border
     draw->AddRect(ImVec2(pos.x + 5, pos.y + 5), ImVec2(pos.x + size.x - 5, pos.y + size.y - 5), IM_COL32(0, 0, 0, 255));
 }
 
@@ -132,9 +138,9 @@ inline bool TabBar(const char* const tabs[], int count, int* current_tab) {
     ImVec2 win_pos = ImGui::GetWindowPos();
     ImVec2 win_size = ImGui::GetWindowSize();
 
-    float bar_x = win_pos.x + 20.0f;
+    float bar_x = win_pos.x + 30.0f;
     float bar_y = win_pos.y + 14.0f;
-    float bar_w = win_size.x - 40.0f;
+    float bar_w = win_size.x - 60.0f;
     float bar_h = 24.0f;
 
     float tab_w = bar_w / (float)count;
@@ -170,7 +176,7 @@ inline bool TabBar(const char* const tabs[], int count, int* current_tab) {
                                  bar_y + (bar_h - 13.0f) * 0.5f);
 
         ImU32 text_col = active ? IM_COL32(255, 255, 255, 255)
-                                : (hovered ? IM_COL32(210, 210, 210, 255) : IM_COL32(120, 120, 120, 255));
+                                : (hovered ? IM_COL32(210, 210, 210, 255) : IM_COL32(115, 115, 115, 255));
 
         draw->AddText(text_pos, text_col, tabs[i]);
 
@@ -196,16 +202,19 @@ inline void BeginContentBox(ImVec2* out_pos = nullptr, ImVec2* out_size = nullpt
     ImVec2 win_pos = ImGui::GetWindowPos();
     ImVec2 win_size = ImGui::GetWindowSize();
 
-    float box_x = win_pos.x + 20.0f;
-    float box_y = win_pos.y + 44.0f;
-    float box_w = win_size.x - 40.0f;
-    float box_h = win_size.y - (box_y - win_pos.y) - 16.0f;
+    float box_x = win_pos.x + 30.0f;
+    float box_y = win_pos.y + 45.0f;
+    float box_w = win_size.x - 60.0f;
+    float box_h = win_size.y - (box_y - win_pos.y) - 30.0f;
 
     s_ContentBoxPos = ImVec2(box_x, box_y);
     s_ContentBoxSize = ImVec2(box_w, box_h);
 
-    draw->AddRectFilled(s_ContentBoxPos, ImVec2(box_x + box_w, box_y + box_h), IM_COL32(8, 8, 8, 230));
-    draw->AddRect(s_ContentBoxPos, ImVec2(box_x + box_w, box_y + box_h), IM_COL32(36, 36, 36, 255));
+    // Inner content box background (pitch black #090909)
+    draw->AddRectFilled(s_ContentBoxPos, ImVec2(box_x + box_w, box_y + box_h), IM_COL32(9, 9, 9, 255));
+
+    // Inner content box 1px outline border (#262626)
+    draw->AddRect(s_ContentBoxPos, ImVec2(box_x + box_w, box_y + box_h), IM_COL32(38, 38, 38, 255));
 
     if (out_pos) *out_pos = s_ContentBoxPos;
     if (out_size) *out_size = s_ContentBoxSize;
@@ -213,7 +222,7 @@ inline void BeginContentBox(ImVec2* out_pos = nullptr, ImVec2* out_size = nullpt
 
 inline void EndContentBox() {
     ImDrawList* draw = ImGui::GetWindowDrawList();
-    draw->AddRect(s_ContentBoxPos, ImVec2(s_ContentBoxPos.x + s_ContentBoxSize.x, s_ContentBoxPos.y + s_ContentBoxSize.y), IM_COL32(36, 36, 36, 255));
+    draw->AddRect(s_ContentBoxPos, ImVec2(s_ContentBoxPos.x + s_ContentBoxSize.x, s_ContentBoxPos.y + s_ContentBoxSize.y), IM_COL32(38, 38, 38, 255));
 }
 
 extern char s_CurrentGroupTitle[64];
@@ -260,16 +269,16 @@ inline void EndGroup() {
     ImDrawList* draw = ImGui::GetWindowDrawList();
     if (s_CurrentGroupTitle[0] != '\0') {
         ImVec2 text_size = ImGui::CalcTextSize(s_CurrentGroupTitle);
-        ImVec2 title_pos = ImVec2(min_p.x + 16.0f, min_p.y - 6.0f);
+        ImVec2 title_pos = ImVec2(min_p.x + 8.0f, min_p.y - 6.0f);
 
-        draw->AddLine(min_p, ImVec2(title_pos.x - 4.0f, min_p.y), border_col);
-        draw->AddLine(ImVec2(title_pos.x + text_size.x + 4.0f, min_p.y), ImVec2(max_p.x, min_p.y), border_col);
+        draw->AddLine(min_p, ImVec2(title_pos.x - 3.0f, min_p.y), border_col);
+        draw->AddLine(ImVec2(title_pos.x + text_size.x + 3.0f, min_p.y), ImVec2(max_p.x, min_p.y), border_col);
 
         draw->AddLine(ImVec2(max_p.x, min_p.y), max_p, border_col);
         draw->AddLine(max_p, ImVec2(min_p.x, max_p.y), border_col);
         draw->AddLine(ImVec2(min_p.x, max_p.y), min_p, border_col);
 
-        draw->AddText(title_pos, IM_COL32(190, 190, 190, 255), s_CurrentGroupTitle);
+        draw->AddText(title_pos, IM_COL32(185, 185, 185, 255), s_CurrentGroupTitle);
     } else {
         draw->AddRect(min_p, max_p, border_col);
     }
@@ -284,8 +293,8 @@ inline void Label(const char* label, const char* value = nullptr) {
 
     float base_x, col_w;
     GetGroupMetrics(base_x, col_w);
-    float content_x = base_x + 16.0f;
-    float right_x = base_x + col_w - 16.0f;
+    float content_x = base_x + 24.0f;
+    float right_x = base_x + col_w - 24.0f;
 
     float y = window->DC.CursorPos.y;
     ImDrawList* draw = window->DrawList;
@@ -308,20 +317,20 @@ inline bool Checkbox(const char* label, bool* v) {
     float base_x, col_w;
     GetGroupMetrics(base_x, col_w);
 
-    float content_x = base_x + 16.0f;
-    float right_x = base_x + col_w - 16.0f;
-
     const char* str_id = (label && label[0] != '\0') ? label : "##checkbox";
     const ImGuiID id = window->GetID(str_id);
     ImVec2 pos = window->DC.CursorPos;
 
     float line_height = 14.0f;
+    float box_pad = 8.0f;
     float box_size = 8.0f;
     float text_gap = 8.0f;
-    float box_x = content_x;
-    float text_x = box_x + box_size + text_gap;
+    float box_x = base_x + box_pad;
+    float text_x = box_x + box_size + text_gap; // base_x + 24.0f
+    float text_w = ImGui::CalcTextSize(label).x;
+    float total_w = (box_pad + box_size + text_gap) + text_w + 4.0f;
 
-    const ImRect total_bb(ImVec2(content_x, pos.y), ImVec2(right_x, pos.y + line_height));
+    const ImRect total_bb(ImVec2(box_x, pos.y), ImVec2(base_x + total_w, pos.y + line_height));
     ImGui::ItemSize(total_bb, 0.0f);
     if (!ImGui::ItemAdd(total_bb, id)) return false;
 
@@ -345,7 +354,7 @@ inline bool Checkbox(const char* label, bool* v) {
                             ImColor(g_Theme.Accent));
     }
 
-    ImU32 text_col = hovered ? IM_COL32(255, 255, 255, 255) : (*v ? IM_COL32(220, 220, 220, 255) : IM_COL32(140, 140, 140, 255));
+    ImU32 text_col = hovered ? IM_COL32(255, 255, 255, 255) : IM_COL32(195, 195, 195, 255);
     draw->AddText(ImVec2(text_x, pos.y), text_col, label);
 
     ImGui::Dummy(ImVec2(0, 4.0f));
@@ -360,18 +369,21 @@ inline int CheckboxHUD(const char* label, bool* record_v, bool* hud_v) {
     float base_x, col_w;
     GetGroupMetrics(base_x, col_w);
 
-    float content_x = base_x + 16.0f;
-    float right_x = base_x + col_w - 16.0f;
-    float y = window->DC.CursorPos.y;
+    float box_pad = 8.0f;
     float box_sz = 8.0f;
+    float text_gap = 8.0f;
+    float box_x = base_x + box_pad;
+    float text_x = box_x + box_sz + text_gap; // base_x + 24.0f
+    float right_x = base_x + col_w - 24.0f;
+    float y = window->DC.CursorPos.y;
 
     // 1. Record checkbox on the left
-    ImRect rec_box_bb(ImVec2(content_x, y + 2.0f), ImVec2(content_x + box_sz, y + 2.0f + box_sz));
+    ImRect rec_box_bb(ImVec2(box_x, y + 2.0f), ImVec2(box_x + box_sz, y + 2.0f + box_sz));
     ImVec2 label_size = ImGui::CalcTextSize(label);
-    ImRect rec_total_bb(ImVec2(content_x, y), ImVec2(content_x + box_sz + 8.0f + label_size.x, y + 14.0f));
+    ImRect rec_total_bb(ImVec2(box_x, y), ImVec2(text_x + label_size.x + 4.0f, y + 14.0f));
 
     ImGuiID rec_id = window->GetID(label);
-    ImGui::ItemSize(ImRect(ImVec2(content_x, y), ImVec2(right_x, y + 15.0f)), 0.0f);
+    ImGui::ItemSize(ImRect(ImVec2(box_x, y), ImVec2(right_x, y + 15.0f)), 0.0f);
     if (!ImGui::ItemAdd(rec_total_bb, rec_id)) return 0;
 
     int changed = 0;
@@ -404,17 +416,27 @@ inline int CheckboxHUD(const char* label, bool* record_v, bool* hud_v) {
     ImDrawList* draw = window->DrawList;
 
     // Draw Record Box
-    draw->AddRectFilled(rec_box_bb.Min, rec_box_bb.Max, *record_v ? ImColor(g_Theme.Accent) : IM_COL32(16, 16, 16, 255));
+    draw->AddRectFilled(rec_box_bb.Min, rec_box_bb.Max, IM_COL32(16, 16, 16, 255));
     draw->AddRect(rec_box_bb.Min, rec_box_bb.Max, rec_hovered ? IM_COL32(80, 80, 80, 255) : IM_COL32(45, 45, 45, 255));
-    draw->AddText(ImVec2(content_x + box_sz + 8.0f, y),
-                  rec_hovered ? IM_COL32(255, 255, 255, 255) : (*record_v ? IM_COL32(220, 220, 220, 255) : IM_COL32(140, 140, 140, 255)),
+    if (*record_v) {
+        draw->AddRectFilled(ImVec2(rec_box_bb.Min.x + 1.0f, rec_box_bb.Min.y + 1.0f),
+                            ImVec2(rec_box_bb.Max.x - 1.0f, rec_box_bb.Max.y - 1.0f),
+                            ImColor(g_Theme.Accent));
+    }
+    draw->AddText(ImVec2(text_x, y),
+                  rec_hovered ? IM_COL32(255, 255, 255, 255) : IM_COL32(195, 195, 195, 255),
                   label);
 
     // Draw HUD Box
-    draw->AddRectFilled(hud_box_bb.Min, hud_box_bb.Max, *hud_v ? ImColor(g_Theme.Accent) : IM_COL32(16, 16, 16, 255));
+    draw->AddRectFilled(hud_box_bb.Min, hud_box_bb.Max, IM_COL32(16, 16, 16, 255));
     draw->AddRect(hud_box_bb.Min, hud_box_bb.Max, hud_hovered ? IM_COL32(80, 80, 80, 255) : IM_COL32(45, 45, 45, 255));
+    if (*hud_v) {
+        draw->AddRectFilled(ImVec2(hud_box_bb.Min.x + 1.0f, hud_box_bb.Min.y + 1.0f),
+                            ImVec2(hud_box_bb.Max.x - 1.0f, hud_box_bb.Max.y - 1.0f),
+                            ImColor(g_Theme.Accent));
+    }
     draw->AddText(ImVec2(hud_box_x + box_sz + 6.0f, y),
-                  hud_hovered ? IM_COL32(255, 255, 255, 255) : (*hud_v ? IM_COL32(200, 200, 200, 255) : IM_COL32(110, 110, 110, 255)),
+                  hud_hovered ? IM_COL32(255, 255, 255, 255) : IM_COL32(195, 195, 195, 255),
                   "hud");
 
     ImGui::Dummy(ImVec2(0, 4.0f));
@@ -429,28 +451,27 @@ inline bool CheckboxColor(const char* label, bool* v, float col[4]) {
     float base_x, col_w;
     GetGroupMetrics(base_x, col_w);
 
-    float content_x = base_x + 16.0f;
-    float right_x = base_x + col_w - 16.0f;
-
     const char* str_id = (label && label[0] != '\0') ? label : "##checkcol";
     const ImGuiID id = window->GetID(str_id);
     ImVec2 pos = window->DC.CursorPos;
 
     float line_height = 14.0f;
+    float box_pad = 8.0f;
     float box_size = 8.0f;
     float text_gap = 8.0f;
-    float box_x = content_x;
-    float text_x = box_x + box_size + text_gap;
+    float box_x = base_x + box_pad;
+    float text_x = box_x + box_size + text_gap; // base_x + 24.0f
+    float right_x = base_x + col_w - 24.0f;
 
     const ImRect total_bb(ImVec2(box_x, pos.y), ImVec2(right_x, pos.y + line_height));
     ImGui::ItemSize(total_bb, 0.0f);
     if (!ImGui::ItemAdd(total_bb, id)) return false;
 
-    float col_box_w = 20.0f;
+    float col_box_w = 16.0f;
     float col_box_h = 7.0f;
     float text_w = ImGui::CalcTextSize(label).x;
-    float check_w = (box_size + text_gap) + text_w + 4.0f;
-    ImRect check_bb(ImVec2(box_x, pos.y), ImVec2(box_x + check_w, pos.y + line_height));
+    float check_w = (box_pad + box_size + text_gap) + text_w + 4.0f;
+    ImRect check_bb(ImVec2(box_x, pos.y), ImVec2(base_x + check_w, pos.y + line_height));
     ImRect col_bb(ImVec2(right_x - col_box_w, pos.y + 3.0f),
                   ImVec2(right_x, pos.y + 3.0f + col_box_h));
 
@@ -484,7 +505,7 @@ inline bool CheckboxColor(const char* label, bool* v, float col[4]) {
                             ImColor(g_Theme.Accent));
     }
 
-    ImU32 text_col = check_hovered ? IM_COL32(255, 255, 255, 255) : (*v ? IM_COL32(220, 220, 220, 255) : IM_COL32(140, 140, 140, 255));
+    ImU32 text_col = check_hovered ? IM_COL32(255, 255, 255, 255) : IM_COL32(195, 195, 195, 255);
     draw->AddText(ImVec2(text_x, pos.y), text_col, label);
 
     draw->AddRectFilled(col_bb.Min, col_bb.Max, ImColor(col[0], col[1], col[2], col[3]));
@@ -507,8 +528,8 @@ inline bool Combo(const char* label, int* current_item, const char* const items[
     float base_x, col_w;
     GetGroupMetrics(base_x, col_w);
 
-    float content_x = base_x + 16.0f;
-    float right_x = base_x + col_w - 16.0f;
+    float content_x = base_x + 24.0f;
+    float right_x = base_x + col_w - 24.0f;
     float width = right_x - content_x;
 
     if (label && label[0] != '\0' && label[0] != '#') {
@@ -633,8 +654,8 @@ inline bool SliderInt(const char* label, int* val, int min_val, int max_val, con
     float base_x, col_w;
     GetGroupMetrics(base_x, col_w);
 
-    float content_x = base_x + 16.0f;
-    float right_x = base_x + col_w - 16.0f;
+    float content_x = base_x + 24.0f;
+    float right_x = base_x + col_w - 24.0f;
 
     if (label && label[0] != '\0' && label[0] != '#') {
         ImGui::SetCursorScreenPos(ImVec2(content_x, window->DC.CursorPos.y));
@@ -642,41 +663,57 @@ inline bool SliderInt(const char* label, int* val, int min_val, int max_val, con
         ImGui::Dummy(ImVec2(0, 3.0f));
     }
 
-    ImGuiContext& g = *GImGui;
     const char* str_id = (label && label[0] != '\0') ? label : "##slider";
     const ImGuiID id = window->GetID(str_id);
     float y = window->DC.CursorPos.y;
     float height = 13.0f;
 
-    ImRect minus_bb(ImVec2(content_x, y), ImVec2(content_x + 10.0f, y + height));
-    ImRect plus_bb(ImVec2(right_x - 10.0f, y), ImVec2(right_x, y + height));
-    ImRect track_bb(ImVec2(content_x + 14.0f, y + 2.0f), ImVec2(right_x - 14.0f, y + height - 2.0f));
+    static ImGuiID s_EditingSliderId = 0;
+    static char s_EditingSliderBuf[32] = {0};
 
-    const ImRect total_bb(ImVec2(content_x, y), ImVec2(right_x, y + height));
-    ImGui::ItemSize(total_bb, 0.0f);
-    if (!ImGui::ItemAdd(total_bb, id, &track_bb, ImGuiItemFlags_Inputable)) return false;
+    // If typing mode is active for this slider
+    if (s_EditingSliderId == id) {
+        ImGui::SetCursorScreenPos(ImVec2(content_x, y - 2.0f));
+        ImGui::SetNextItemWidth(right_x - content_x);
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4, 2));
+        ImGui::PushStyleColor(ImGuiCol_FrameBg, IM_COL32(22, 22, 22, 255));
+        ImGui::PushStyleColor(ImGuiCol_Border, ImColor(g_Theme.Accent).Value);
 
-    bool temp_input_is_active = ImGui::TempInputIsActive(id);
-    if (!temp_input_is_active) {
-        bool track_hovered = ImGui::ItemHoverable(track_bb, id, g.LastItemData.ItemFlags);
-        const bool clicked = track_hovered && ImGui::IsMouseClicked(0, ImGuiInputFlags_None, id);
-        const bool double_clicked = track_hovered && (g.IO.MouseClickedCount[0] == 2);
-        if ((clicked && g.IO.KeyCtrl) || double_clicked) {
-            temp_input_is_active = true;
-            ImGui::FocusWindow(window);
-            ImGui::SetActiveID(id, window);
-            ImGui::SetFocusID(id, window);
+        char edit_id[64];
+        snprintf(edit_id, sizeof(edit_id), "##edit_sl_%u", id);
+        ImGui::SetKeyboardFocusHere();
+
+        bool enter_pressed = ImGui::InputText(edit_id, s_EditingSliderBuf, sizeof(s_EditingSliderBuf),
+            ImGuiInputTextFlags_CharsDecimal | ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll);
+
+        bool changed = false;
+        if (enter_pressed || ImGui::IsItemDeactivated()) {
+            int parsed = atoi(s_EditingSliderBuf);
+            if (parsed < min_val) parsed = min_val;
+            if (parsed > max_val) parsed = max_val;
+            *val = parsed;
+            changed = true;
+            s_EditingSliderId = 0;
+            ImGui::MarkItemEdited(id);
         }
+
+        ImGui::PopStyleColor(2);
+        ImGui::PopStyleVar();
+        ImGui::Dummy(ImVec2(0, 5.0f));
+        return changed;
     }
 
-    if (temp_input_is_active) {
-        bool value_changed = ImGui::TempInputScalar(track_bb, id, label, ImGuiDataType_S32, val, "%d", &min_val, &max_val);
-        ImGui::Dummy(ImVec2(0, 5.0f));
-        return value_changed;
-    }
+    const ImRect total_bb(ImVec2(base_x + 8.0f, y), ImVec2(right_x + 16.0f, y + height));
+    ImGui::ItemSize(total_bb, 0.0f);
+    if (!ImGui::ItemAdd(total_bb, id)) return false;
+
+    ImRect minus_bb(ImVec2(base_x + 8.0f, y), ImVec2(base_x + 16.0f, y + height));
+    ImRect plus_bb(ImVec2(right_x + 8.0f, y), ImVec2(right_x + 16.0f, y + height));
+    ImRect track_bb(ImVec2(content_x, y + 3.0f), ImVec2(right_x, y + 10.0f));
 
     bool value_edited = false;
 
+    // Minus button
     const ImGuiID minus_id = window->GetID((std::string(label) + "_minus").c_str());
     bool minus_hovered, minus_held;
     if (ImGui::ButtonBehavior(minus_bb, minus_id, &minus_hovered, &minus_held)) {
@@ -687,6 +724,7 @@ inline bool SliderInt(const char* label, int* val, int min_val, int max_val, con
         }
     }
 
+    // Plus button
     const ImGuiID plus_id = window->GetID((std::string(label) + "_plus").c_str());
     bool plus_hovered, plus_held;
     if (ImGui::ButtonBehavior(plus_bb, plus_id, &plus_hovered, &plus_held)) {
@@ -699,6 +737,17 @@ inline bool SliderInt(const char* label, int* val, int min_val, int max_val, con
 
     bool track_hovered, track_held;
     ImGui::ButtonBehavior(track_bb, id, &track_hovered, &track_held);
+
+    // Enter keyboard edit mode on right-click or double-click or Ctrl+click
+    ImGuiContext& g = *GImGui;
+    const bool right_clicked = track_hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Right);
+    const bool double_clicked = track_hovered && (g.IO.MouseClickedCount[0] == 2);
+    const bool ctrl_clicked = track_hovered && ImGui::IsMouseClicked(0) && g.IO.KeyCtrl;
+    if (right_clicked || double_clicked || ctrl_clicked) {
+        s_EditingSliderId = id;
+        snprintf(s_EditingSliderBuf, sizeof(s_EditingSliderBuf), "%d", *val);
+        return false;
+    }
 
     if (track_held) {
         float mouse_x = g.IO.MousePos.x;
@@ -731,8 +780,8 @@ inline bool SliderInt(const char* label, int* val, int min_val, int max_val, con
     snprintf(val_str, sizeof(val_str), "%d%s", *val, suffix ? suffix : "");
     ImVec2 val_size = ImGui::CalcTextSize(val_str);
 
-    if (fill_w > val_size.x + 6.0f) {
-        float text_x = track_bb.Min.x + fill_w - val_size.x - 3.0f;
+    if (frac > 0.35f) {
+        float text_x = track_bb.Min.x + fill_w - val_size.x - 2.0f;
         draw->AddText(ImVec2(text_x, track_bb.Min.y - 3.0f), IM_COL32(255, 255, 255, 255), val_str);
     } else {
         float text_x = track_bb.Min.x + fill_w + 3.0f;
@@ -758,8 +807,8 @@ inline bool Button(const char* label, ImVec2 size = ImVec2(0, 0), ImU32 custom_b
     float base_x, col_w;
     GetGroupMetrics(base_x, col_w);
 
-    float content_x = base_x + 16.0f;
-    float right_x = base_x + col_w - 16.0f;
+    float content_x = base_x + 24.0f;
+    float right_x = base_x + col_w - 24.0f;
     if (size.x <= 0.0f)
         size.x = right_x - content_x;
     if (size.y <= 0.0f)
@@ -858,8 +907,8 @@ inline bool Keybind(const char* label, int* key, int* mode) {
     float base_x, col_w;
     GetGroupMetrics(base_x, col_w);
 
-    float content_x = base_x + 16.0f;
-    float right_x = base_x + col_w - 16.0f;
+    float content_x = base_x + 24.0f;
+    float right_x = base_x + col_w - 24.0f;
 
     if (label && label[0] != '\0' && label[0] != '#') {
         ImGui::SetCursorScreenPos(ImVec2(content_x, window->DC.CursorPos.y));
@@ -867,29 +916,38 @@ inline bool Keybind(const char* label, int* key, int* mode) {
         ImGui::Dummy(ImVec2(0, 3.0f));
     }
 
+    const char* str_id = (label && label[0] != '\0') ? label : "##keybind";
+    const ImGuiID id = window->GetID(str_id);
     float y = window->DC.CursorPos.y;
-    float key_box_w = (right_x - content_x) * 0.65f;
-    float mode_box_w = (right_x - content_x) - key_box_w - 6.0f;
+    float height = 20.0f;
 
-    ImRect key_bb(ImVec2(content_x, y), ImVec2(content_x + key_box_w, y + 20.0f));
-    ImRect mode_bb(ImVec2(content_x + key_box_w + 6.0f, y), ImVec2(right_x, y + 20.0f));
+    const ImRect bb(ImVec2(content_x, y), ImVec2(right_x, y + height));
+    ImGui::ItemSize(bb, 0.0f);
+    if (!ImGui::ItemAdd(bb, id)) return false;
 
-    const ImRect total_bb(ImVec2(content_x, y), ImVec2(right_x, y + 20.0f));
-    ImGui::ItemSize(total_bb, 0.0f);
+    bool hovered, held;
+    bool pressed = ImGui::ButtonBehavior(bb, id, &hovered, &held);
 
-    const ImGuiID key_id = window->GetID((std::string(label) + "_key").c_str());
-    if (!ImGui::ItemAdd(key_bb, key_id)) return false;
+    bool is_listening = (g_ActiveKeybindId == (int)id);
 
-    const ImGuiID mode_id = window->GetID((std::string(label) + "_mode").c_str());
-    if (!ImGui::ItemAdd(mode_bb, mode_id)) return false;
+    const char* mode_name = GetKeyModeName(*mode);
+    ImVec2 mode_size = ImGui::CalcTextSize(mode_name);
 
-    bool key_hovered, key_held;
-    if (ImGui::ButtonBehavior(key_bb, key_id, &key_hovered, &key_held)) {
-        g_ActiveKeybindId = (g_ActiveKeybindId == (int)key_id) ? -1 : (int)key_id;
+    ImGuiContext& g = *GImGui;
+    bool clicked_mode_area = hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && (g.IO.MousePos.x > (bb.Max.x - mode_size.x - 16.0f));
+    bool r_clicked = hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Right);
+
+    if (clicked_mode_area) {
+        *mode = (*mode + 1) % 3;
+    } else if (pressed) {
+        if (is_listening) {
+            g_ActiveKeybindId = -1;
+        } else {
+            g_ActiveKeybindId = (int)id;
+        }
     }
 
-    bool is_binding = (g_ActiveKeybindId == (int)key_id);
-    if (is_binding) {
+    if (is_listening) {
         if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
             *key = 0;
             g_ActiveKeybindId = -1;
@@ -901,9 +959,9 @@ inline bool Keybind(const char* label, int* key, int* mode) {
                     break;
                 }
             }
-            if (is_binding) {
+            if (is_listening) {
                 for (int m = 0; m < 5; ++m) {
-                    if (ImGui::IsMouseClicked(m)) {
+                    if (ImGui::IsMouseClicked(m) && !hovered) {
                         *key = m + 1;
                         g_ActiveKeybindId = -1;
                         break;
@@ -913,28 +971,35 @@ inline bool Keybind(const char* label, int* key, int* mode) {
         }
     }
 
-    bool mode_hovered, mode_held;
-    if (ImGui::ButtonBehavior(mode_bb, mode_id, &mode_hovered, &mode_held)) {
-        *mode = (*mode + 1) % 3;
+    char popup_id[64];
+    snprintf(popup_id, sizeof(popup_id), "##mode_popup_%u", id);
+    if (r_clicked) {
+        ImGui::OpenPopup(popup_id);
     }
 
     ImDrawList* draw = window->DrawList;
+    ImU32 bg_col = hovered ? IM_COL32(30, 30, 30, 255) : IM_COL32(22, 22, 22, 255);
+    ImU32 border_col = is_listening ? ImColor(g_Theme.Accent) : (hovered ? IM_COL32(65, 65, 65, 255) : IM_COL32(42, 42, 42, 255));
 
-    draw->AddRectFilled(key_bb.Min, key_bb.Max, IM_COL32(22, 22, 22, 255));
-    draw->AddRect(key_bb.Min, key_bb.Max, is_binding ? ImColor(g_Theme.Accent) : (key_hovered ? IM_COL32(65, 65, 65, 255) : IM_COL32(42, 42, 42, 255)));
+    draw->AddRectFilled(bb.Min, bb.Max, bg_col);
+    draw->AddRect(bb.Min, bb.Max, border_col);
 
-    const char* key_name = is_binding ? "..." : GetKeyName(*key);
-    ImVec2 key_name_sz = ImGui::CalcTextSize(key_name);
-    draw->AddText(ImVec2(key_bb.Min.x + 8.0f, key_bb.Min.y + (20.0f - key_name_sz.y) * 0.5f),
-                  is_binding ? ImColor(g_Theme.Accent) : IM_COL32(200, 200, 200, 255), key_name);
+    float text_y = bb.Min.y + (height - 13.0f) * 0.5f;
 
-    draw->AddRectFilled(mode_bb.Min, mode_bb.Max, IM_COL32(22, 22, 22, 255));
-    draw->AddRect(mode_bb.Min, mode_bb.Max, mode_hovered ? IM_COL32(65, 65, 65, 255) : IM_COL32(42, 42, 42, 255));
+    const char* key_text = is_listening ? "..." : GetKeyName(*key);
+    ImU32 key_col = is_listening ? ImGui::ColorConvertFloat4ToU32(g_Theme.Accent) : IM_COL32(195, 195, 195, 255);
+    draw->AddText(ImVec2(bb.Min.x + 8.0f, text_y), key_col, key_text);
 
-    const char* mode_name = GetKeyModeName(*mode);
-    ImVec2 mode_name_sz = ImGui::CalcTextSize(mode_name);
-    draw->AddText(ImVec2(mode_bb.Min.x + (mode_box_w - mode_name_sz.x) * 0.5f, mode_bb.Min.y + (20.0f - mode_name_sz.y) * 0.5f),
-                  IM_COL32(165, 165, 165, 255), mode_name);
+    draw->AddText(ImVec2(bb.Max.x - mode_size.x - 8.0f, text_y),
+                  IM_COL32(130, 130, 130, 255),
+                  mode_name);
+
+    if (ImGui::BeginPopup(popup_id)) {
+        if (ImGui::Selectable("Hold", *mode == 0)) *mode = 0;
+        if (ImGui::Selectable("Toggle", *mode == 1)) *mode = 1;
+        if (ImGui::Selectable("Always on", *mode == 2)) *mode = 2;
+        ImGui::EndPopup();
+    }
 
     ImGui::Dummy(ImVec2(0, 5.0f));
 
