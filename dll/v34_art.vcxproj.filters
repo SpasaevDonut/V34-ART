@@ -116,6 +116,9 @@
     <ClInclude Include="art_logic.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="art_ot_ui.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="..\include\v34_art_version.h">
       <Filter>Header Files</Filter>
     </ClInclude>

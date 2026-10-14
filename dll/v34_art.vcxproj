@@ -91,6 +91,7 @@
     <ClInclude Include="art_hlae.h" />
     <ClInclude Include="art_internal.h" />
     <ClInclude Include="art_logic.h" />
+    <ClInclude Include="art_ot_ui.h" />
     <ClInclude Include="..\include\v34_art_version.h" />
     <ClInclude Include="..\third_party\advancedfx\shared\AfxConsole.h" />
     <ClInclude Include="..\third_party\advancedfx\shared\AfxMath.h" />

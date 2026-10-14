@@ -6254,7 +6254,9 @@ namespace
 		ImGui::End();
 	}
 
-	void DrawMainWindow()
+#include "art_ot_ui.h"
+
+	void DrawMainWindowLegacy()
 	{
 		ApplyThemeColors();
 		ImGui::SetNextWindowSize( ImVec2( 1220, 760 ), ImGuiCond_FirstUseEver );
@@ -6405,6 +6407,15 @@ namespace
 		ImGui::EndChild();
 		ImGui::End();
 
+		if ( !open )
+			SetArtGuiVisible( false );
+	}
+
+	void DrawMainWindow()
+	{
+		OT::InitStyle();
+		bool open = true;
+		OT::RenderMenu( &open );
 		if ( !open )
 			SetArtGuiVisible( false );
 	}
@@ -6947,6 +6958,7 @@ namespace
 		ImGui_ImplDX9_NewFrame();
 		ImGui_ImplWin32_NewFrame();
 		ImGui::NewFrame();
+		OT::ProcessRecordingKeybinds();
 		if ( mainVisible )
 		{
 			DrawMainWindow();

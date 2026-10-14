@@ -44,3 +44,6 @@ v34_art.log
 .DS_Store
 Desktop.ini
 Thumbs.db
+
+# Reference UI prototype
+ot_ui/
