@@ -49,12 +49,12 @@ namespace art
 	};
 
 	// Option value labels / ffmpeg argument values for enumerated options.
-	inline const char *const kArtX264Speeds[] = { "ultrafast", "superfast", "veryfast", "faster", "fast", "medium", "slow", "slower", "veryslow" };
-	inline const char *const kArtX264Tunes[] = { "none", "film", "animation", "grain", "stillimage", "fastdecode", "zerolatency" };
-	inline const char *const kArtNvencPresets[] = { "p1", "p2", "p3", "p4", "p5", "p6", "p7" };
-	inline const char *const kArtNvencTunes[] = { "none", "hq", "ll", "ull", "lossless" };
-	inline const char *const kArtProres422Profiles[] = { "proxy", "lt", "standard", "hq" };
-	inline const char *const kArtProres4444Profiles[] = { "4444", "4444xq" };
+	static const char *const kArtX264Speeds[] = { "ultrafast", "superfast", "veryfast", "faster", "fast", "medium", "slow", "slower", "veryslow" };
+	static const char *const kArtX264Tunes[] = { "none", "film", "animation", "grain", "stillimage", "fastdecode", "zerolatency" };
+	static const char *const kArtNvencPresets[] = { "p1", "p2", "p3", "p4", "p5", "p6", "p7" };
+	static const char *const kArtNvencTunes[] = { "none", "hq", "ll", "ull", "lossless" };
+	static const char *const kArtProres422Profiles[] = { "proxy", "lt", "standard", "hq" };
+	static const char *const kArtProres4444Profiles[] = { "4444", "4444xq" };
 
 	struct ArtFfmpegPresetInfo
 	{
