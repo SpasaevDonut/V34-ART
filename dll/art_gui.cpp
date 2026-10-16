@@ -8016,7 +8016,29 @@ namespace
 		if ( campathVisible )
 			DrawHlaeCampathOverlay();
 		ImGui::Render();
+
+		DWORD prevSrgbWrite = FALSE;
+		const bool hasPrevSrgbWrite = SUCCEEDED( pDevice->GetRenderState( D3DRS_SRGBWRITEENABLE, &prevSrgbWrite ) );
+		DWORD prevSrgbSampler = FALSE;
+		const bool hasPrevSrgbSampler = SUCCEEDED( pDevice->GetSamplerState( 0, D3DSAMP_SRGBTEXTURE, &prevSrgbSampler ) );
+		DWORD prevColorWrite = 0;
+		const bool hasPrevColorWrite = SUCCEEDED( pDevice->GetRenderState( D3DRS_COLORWRITEENABLE, &prevColorWrite ) );
+
+		if ( hasPrevSrgbWrite && prevSrgbWrite )
+			pDevice->SetRenderState( D3DRS_SRGBWRITEENABLE, FALSE );
+		if ( hasPrevSrgbSampler && prevSrgbSampler )
+			pDevice->SetSamplerState( 0, D3DSAMP_SRGBTEXTURE, FALSE );
+		pDevice->SetRenderState( D3DRS_COLORWRITEENABLE, 0x0000000F );
+
 		ImGui_ImplDX9_RenderDrawData( ImGui::GetDrawData() );
+
+		if ( hasPrevColorWrite )
+			pDevice->SetRenderState( D3DRS_COLORWRITEENABLE, prevColorWrite );
+		if ( hasPrevSrgbSampler && prevSrgbSampler )
+			pDevice->SetSamplerState( 0, D3DSAMP_SRGBTEXTURE, prevSrgbSampler );
+		if ( hasPrevSrgbWrite && prevSrgbWrite )
+			pDevice->SetRenderState( D3DRS_SRGBWRITEENABLE, prevSrgbWrite );
+
 		InterlockedIncrement( &g_nGuiRenderedFrames );
 		InterlockedExchange( &g_nGuiFrameActive, FALSE );
 	}
