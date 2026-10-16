@@ -998,11 +998,49 @@ namespace art
 				return;
 			}
 			const char *pName = g_pEngine->Cmd_Argv( 1 );
-			const LONG newPreset = ArtFfmpegPresetFromName( pName );
+			LONG newPreset = ART_FFMPEG_PRESET_PRORES_422;
+			if ( !TryParseArtFfmpegPresetName( pName, &newPreset ) )
+			{
+				ArtConsoleMessage( "art_ffmpeg_preset: unknown preset '%s' (run art_ffmpeg_preset without arguments for the list).\n", pName ? pName : "" );
+				return;
+			}
+			// Legacy aliases carried a fixed CRF; keep their behaviour on the unified x264 preset.
+			if ( pName && ( !Q_stricmp( pName, "h264_lossless" ) || !Q_stricmp( pName, "x264_lossless" ) ) )
+				SetArtFfmpegOption( ART_FFOPT_X264_CRF, 0 );
+			else if ( pName && ( !Q_stricmp( pName, "h264_hq" ) || !Q_stricmp( pName, "x264_hq" ) ) )
+				SetArtFfmpegOption( ART_FFOPT_X264_CRF, 16 );
 			InterlockedExchange( &g_nArtFfmpegPreset, newPreset );
 			const ArtFfmpegPresetInfo *pInfo = GetArtFfmpegPresetInfo( newPreset );
 			LogMessage( "FFMPEG PRESET SET: preset='%s' (%s)", pInfo->name, pInfo->displayName );
 			ArtConsoleMessage( "art_ffmpeg_preset: preset set to '%s' (%s).\n", pInfo->name, pInfo->displayName );
+		}
+
+		void ArtFfmpegOpt_f()
+		{
+			const int argc = g_pEngine ? g_pEngine->Cmd_Argc() : 0;
+			if ( argc < 3 )
+			{
+				ArtConsoleMessage( "art_ffmpeg_opt <option> <value> - encoder options:\n" );
+				for ( int i = 0; i < ART_FFOPT_COUNT; ++i )
+				{
+					const ArtFfmpegOptionInfo *pInfo = GetArtFfmpegOptionInfo( i );
+					ArtConsoleMessage( "  %-20s = %d (range %d..%d)\n", pInfo->name, GetArtFfmpegOption( i ), pInfo->minValue, pInfo->maxValue );
+				}
+				return;
+			}
+			if ( InterlockedCompareExchange( &g_bRecording, FALSE, FALSE ) )
+			{
+				ArtConsoleMessage( "art_ffmpeg_opt: cannot change options while recording.\n" );
+				return;
+			}
+			const int optionIndex = FindArtFfmpegOptionByName( g_pEngine->Cmd_Argv( 1 ) );
+			if ( optionIndex < 0 )
+			{
+				ArtConsoleMessage( "art_ffmpeg_opt: unknown option '%s'.\n", g_pEngine->Cmd_Argv( 1 ) );
+				return;
+			}
+			SetArtFfmpegOption( optionIndex, atoi( g_pEngine->Cmd_Argv( 2 ) ) );
+			ArtConsoleMessage( "art_ffmpeg_opt: %s = %d.\n", GetArtFfmpegOptionInfo( optionIndex )->name, GetArtFfmpegOption( optionIndex ) );
 		}
 
 		void ArtFfmpegCustom_f()
@@ -1183,7 +1221,9 @@ namespace art
 		ConCommand art_ffmpeg_path( "art_ffmpeg_path", ArtFfmpegPath_f,
 			"Set path to ffmpeg.exe. Usage: art_ffmpeg_path <path|default>." );
 		ConCommand art_ffmpeg_preset( "art_ffmpeg_preset", ArtFfmpegPreset_f,
-			"Set active FFmpeg encoding preset. Usage: art_ffmpeg_preset <prores_422|prores_4444|h264_hq|h264_lossless|nvenc_h264|nvenc_hevc|custom>." );
+			"Set active FFmpeg encoding preset. Usage: art_ffmpeg_preset <prores_422|prores_4444|h264|nvenc_h264|nvenc_hevc|custom>." );
+		ConCommand art_ffmpeg_opt( "art_ffmpeg_opt", ArtFfmpegOpt_f,
+			"Set an FFmpeg encoder option (CRF, tune, speed, CQ, profile...). Usage: art_ffmpeg_opt <option> <value>." );
 		ConCommand art_ffmpeg_custom( "art_ffmpeg_custom", ArtFfmpegCustom_f,
 			"Set custom FFmpeg arguments template. Usage: art_ffmpeg_custom <arguments_template>." );
 		ConCommand art_ffmpeg_test( "art_ffmpeg_test", ArtFfmpegTest_f,
@@ -1247,6 +1287,7 @@ namespace art
 				!Q_stricmp( pName, "art_record" ) || !Q_stricmp( pName, "art_hud" ) ||
 				!Q_stricmp( pName, "art_output_mode" ) || !Q_stricmp( pName, "art_ffmpeg_path" ) ||
 				!Q_stricmp( pName, "art_ffmpeg_preset" ) || !Q_stricmp( pName, "art_ffmpeg_custom" ) ||
+				!Q_stricmp( pName, "art_ffmpeg_opt" ) ||
 				!Q_stricmp( pName, "art_ffmpeg_test" ) || !Q_stricmp( pName, "art_ffmpeg_status" ) ||
 				!Q_stricmp( pName, "art_demo_unpause_on_recording" ) ||
 				!Q_stricmp( pName, "art_prefix" ) || !Q_stricmp( pName, "art_viewmodel_fov" ) ||

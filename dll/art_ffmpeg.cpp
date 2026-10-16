@@ -16,8 +16,38 @@ namespace art
 	char g_szArtFfmpegCustomArgs[1024] =
 		"-y -f rawvideo -pix_fmt rgb24 -s {WIDTH}x{HEIGHT} -r {FPS} -i - -c:v prores_ks -profile:v 3 -pix_fmt yuv422p10le \"{OUTPUT_FILE}\"";
 
+	volatile LONG g_ArtFfmpegOptions[ART_FFOPT_COUNT] =
+	{
+		16,	// x264 crf
+		3,	// x264 speed ("faster")
+		0,	// x264 tune ("none")
+		9,	// nvenc h264 cq
+		4,	// nvenc h264 preset ("p5")
+		0,	// nvenc h264 tune
+		18,	// nvenc hevc cq
+		3,	// nvenc hevc preset ("p4")
+		0,	// nvenc hevc tune
+		3,	// prores 422 profile ("hq")
+		0	// prores 4444 profile ("4444")
+	};
+
 	namespace
 	{
+		static const ArtFfmpegOptionInfo s_Options[ART_FFOPT_COUNT] =
+		{
+			{ ART_FFOPT_X264_CRF, "x264_crf", 0, 51, 16 },
+			{ ART_FFOPT_X264_SPEED, "x264_speed", 0, ARRAYSIZE( kArtX264Speeds ) - 1, 3 },
+			{ ART_FFOPT_X264_TUNE, "x264_tune", 0, ARRAYSIZE( kArtX264Tunes ) - 1, 0 },
+			{ ART_FFOPT_NVH264_CQ, "nvh264_cq", 0, 51, 9 },
+			{ ART_FFOPT_NVH264_PRESET, "nvh264_preset", 0, ARRAYSIZE( kArtNvencPresets ) - 1, 4 },
+			{ ART_FFOPT_NVH264_TUNE, "nvh264_tune", 0, ARRAYSIZE( kArtNvencTunes ) - 1, 0 },
+			{ ART_FFOPT_NVHEVC_CQ, "nvhevc_cq", 0, 51, 18 },
+			{ ART_FFOPT_NVHEVC_PRESET, "nvhevc_preset", 0, ARRAYSIZE( kArtNvencPresets ) - 1, 3 },
+			{ ART_FFOPT_NVHEVC_TUNE, "nvhevc_tune", 0, ARRAYSIZE( kArtNvencTunes ) - 1, 0 },
+			{ ART_FFOPT_PRORES422_PROFILE, "prores422_profile", 0, ARRAYSIZE( kArtProres422Profiles ) - 1, 3 },
+			{ ART_FFOPT_PRORES4444_PROFILE, "prores4444_profile", 0, ARRAYSIZE( kArtProres4444Profiles ) - 1, 0 }
+		};
+
 		static const ArtFfmpegPresetInfo s_Presets[] =
 		{
 			{
@@ -37,36 +67,28 @@ namespace art
 				"Full 4:4:4 chroma sampling for highest color fidelity and compositing precision."
 			},
 			{
-				ART_FFMPEG_PRESET_H264_HQ,
-				"h264_hq",
-				"x264 High Quality CRF 16 (.mp4)",
+				ART_FFMPEG_PRESET_H264,
+				"h264",
+				"x264 (.mp4) - adjustable CRF / tune",
 				"mp4",
-				"-y -f rawvideo -pix_fmt rgb24 -s {WIDTH}x{HEIGHT} -r {FPS} -i - -c:v libx264 -crf 16 -preset faster -pix_fmt yuv420p \"{OUTPUT_FILE}\"",
-				"Visually near-lossless H.264 video with compact file size and universal compatibility."
-			},
-			{
-				ART_FFMPEG_PRESET_H264_LOSSLESS,
-				"h264_lossless",
-				"x264 Lossless CRF 0 (.mp4)",
-				"mp4",
-				"-y -f rawvideo -pix_fmt rgb24 -s {WIDTH}x{HEIGHT} -r {FPS} -i - -c:v libx264 -crf 0 -preset veryfast -pix_fmt yuv444p \"{OUTPUT_FILE}\"",
-				"True mathematical lossless RGB/4:4:4 H.264 encoding."
+				"",
+				"Software H.264. CRF 0 is mathematically lossless (4:4:4); higher CRF means smaller files. Tune and speed are configurable."
 			},
 			{
 				ART_FFMPEG_PRESET_NVENC_H264,
 				"nvenc_h264",
-				"NVIDIA NVENC H.264 CQ 9 (.mp4) - GPU High Quality",
+				"NVIDIA NVENC H.264 (.mp4) - GPU, adjustable CQ",
 				"mp4",
 				"-y -f rawvideo -pix_fmt rgb24 -s {WIDTH}x{HEIGHT} -r {FPS} -i - -c:v h264_nvenc -preset p5 -cq 9 -pix_fmt yuv420p \"{OUTPUT_FILE}\"",
-				"Hardware-accelerated NVIDIA GPU encoding tuned to CQ 9 (CRF 9 equivalent). Ultra-fast with near-zero CPU load."
+				"Hardware-accelerated NVIDIA GPU encoding with constant-quality (CQ) rate control. Near-zero CPU load."
 			},
 			{
 				ART_FFMPEG_PRESET_NVENC_HEVC,
 				"nvenc_hevc",
-				"NVIDIA NVENC HEVC / H.265 (.mp4) - GPU Accelerated",
+				"NVIDIA NVENC HEVC / H.265 (.mp4) - GPU, adjustable CQ",
 				"mp4",
 				"-y -f rawvideo -pix_fmt rgb24 -s {WIDTH}x{HEIGHT} -r {FPS} -i - -c:v hevc_nvenc -preset p4 -cq 18 -pix_fmt yuv420p \"{OUTPUT_FILE}\"",
-				"High-efficiency H.265 NVIDIA GPU hardware encoding."
+				"High-efficiency H.265 NVIDIA GPU hardware encoding with constant-quality (CQ) rate control."
 			},
 			{
 				ART_FFMPEG_PRESET_CUSTOM,
@@ -148,22 +170,153 @@ namespace art
 		return s_Presets[0].name;
 	}
 
-	LONG ArtFfmpegPresetFromName( const char *pName )
+	bool TryParseArtFfmpegPresetName( const char *pName, LONG *pPresetOut )
 	{
-		if ( !pName )
-			return ART_FFMPEG_PRESET_PRORES_422;
+		if ( !pName || !pName[0] )
+			return false;
+		LONG result = -1;
 		for ( int i = 0; i < ARRAYSIZE( s_Presets ); ++i )
 		{
 			if ( !Q_stricmp( pName, s_Presets[i].name ) )
-				return s_Presets[i].id;
+				result = s_Presets[i].id;
 		}
-		if ( !Q_stricmp( pName, "prores" ) )
-			return ART_FFMPEG_PRESET_PRORES_422;
-		if ( !Q_stricmp( pName, "h264" ) || !Q_stricmp( pName, "x264" ) || !Q_stricmp( pName, "mp4" ) )
-			return ART_FFMPEG_PRESET_H264_HQ;
-		if ( !Q_stricmp( pName, "nvenc" ) )
-			return ART_FFMPEG_PRESET_NVENC_H264;
-		return ART_FFMPEG_PRESET_PRORES_422;
+		if ( result < 0 )
+		{
+			if ( !Q_stricmp( pName, "prores" ) || !Q_stricmp( pName, "prores422" ) )
+				result = ART_FFMPEG_PRESET_PRORES_422;
+			else if ( !Q_stricmp( pName, "prores4444" ) )
+				result = ART_FFMPEG_PRESET_PRORES_4444;
+			else if ( !Q_stricmp( pName, "x264" ) || !Q_stricmp( pName, "mp4" ) ||
+				!Q_stricmp( pName, "h264_hq" ) || !Q_stricmp( pName, "x264_hq" ) ||
+				!Q_stricmp( pName, "h264_lossless" ) || !Q_stricmp( pName, "x264_lossless" ) )
+				result = ART_FFMPEG_PRESET_H264;
+			else if ( !Q_stricmp( pName, "nvenc" ) || !Q_stricmp( pName, "nvenc264" ) )
+				result = ART_FFMPEG_PRESET_NVENC_H264;
+			else if ( !Q_stricmp( pName, "hevc" ) || !Q_stricmp( pName, "nvenc265" ) )
+				result = ART_FFMPEG_PRESET_NVENC_HEVC;
+		}
+		if ( result < 0 )
+			return false;
+		if ( pPresetOut )
+			*pPresetOut = result;
+		return true;
+	}
+
+	LONG ArtFfmpegPresetFromName( const char *pName )
+	{
+		LONG preset = ART_FFMPEG_PRESET_PRORES_422;
+		TryParseArtFfmpegPresetName( pName, &preset );
+		return preset;
+	}
+
+	const ArtFfmpegOptionInfo *GetArtFfmpegOptionInfo( int optionIndex )
+	{
+		if ( optionIndex >= 0 && optionIndex < ART_FFOPT_COUNT )
+			return &s_Options[optionIndex];
+		return NULL;
+	}
+
+	int FindArtFfmpegOptionByName( const char *pName )
+	{
+		if ( !pName )
+			return -1;
+		for ( int i = 0; i < ART_FFOPT_COUNT; ++i )
+		{
+			if ( !Q_stricmp( pName, s_Options[i].name ) )
+				return i;
+		}
+		return -1;
+	}
+
+	int GetArtFfmpegOption( int optionIndex )
+	{
+		if ( optionIndex < 0 || optionIndex >= ART_FFOPT_COUNT )
+			return 0;
+		return static_cast<int>( InterlockedCompareExchange( &g_ArtFfmpegOptions[optionIndex], 0, 0 ) );
+	}
+
+	void SetArtFfmpegOption( int optionIndex, int value )
+	{
+		if ( optionIndex < 0 || optionIndex >= ART_FFOPT_COUNT )
+			return;
+		const ArtFfmpegOptionInfo &info = s_Options[optionIndex];
+		if ( value < info.minValue )
+			value = info.minValue;
+		if ( value > info.maxValue )
+			value = info.maxValue;
+		InterlockedExchange( &g_ArtFfmpegOptions[optionIndex], value );
+	}
+
+	void ResetArtFfmpegOptions()
+	{
+		for ( int i = 0; i < ART_FFOPT_COUNT; ++i )
+			InterlockedExchange( &g_ArtFfmpegOptions[i], s_Options[i].defaultValue );
+	}
+
+	void BuildArtFfmpegArgumentTemplate( LONG presetId, char *pOut, size_t outSize )
+	{
+		if ( !pOut || outSize == 0 )
+			return;
+
+		static const char kInput[] = "-y -f rawvideo -pix_fmt rgb24 -s {WIDTH}x{HEIGHT} -r {FPS} -i - ";
+		char encoder[512];
+		encoder[0] = '\0';
+
+		switch ( presetId )
+		{
+		case ART_FFMPEG_PRESET_CUSTOM:
+			Q_strncpy( pOut, g_szArtFfmpegCustomArgs, static_cast<int>( outSize ) );
+			return;
+
+		case ART_FFMPEG_PRESET_PRORES_422:
+		{
+			const int profile = GetArtFfmpegOption( ART_FFOPT_PRORES422_PROFILE );
+			Q_snprintf( encoder, sizeof( encoder ), "-c:v prores_ks -profile:v %d -pix_fmt yuv422p10le", profile );
+			break;
+		}
+
+		case ART_FFMPEG_PRESET_PRORES_4444:
+		{
+			const int profile = GetArtFfmpegOption( ART_FFOPT_PRORES4444_PROFILE );
+			Q_snprintf( encoder, sizeof( encoder ), "-c:v prores_ks -profile:v %d -pix_fmt yuv444p10le", 4 + profile );
+			break;
+		}
+
+		case ART_FFMPEG_PRESET_H264:
+		{
+			const int crf = GetArtFfmpegOption( ART_FFOPT_X264_CRF );
+			const int speed = GetArtFfmpegOption( ART_FFOPT_X264_SPEED );
+			const int tune = GetArtFfmpegOption( ART_FFOPT_X264_TUNE );
+			char tuneArg[48] = "";
+			if ( tune > 0 )
+				Q_snprintf( tuneArg, sizeof( tuneArg ), " -tune %s", kArtX264Tunes[tune] );
+			// CRF 0 is only lossless when chroma is not subsampled.
+			Q_snprintf( encoder, sizeof( encoder ), "-c:v libx264 -crf %d -preset %s%s -pix_fmt %s",
+				crf, kArtX264Speeds[speed], tuneArg, crf == 0 ? "yuv444p" : "yuv420p" );
+			break;
+		}
+
+		case ART_FFMPEG_PRESET_NVENC_H264:
+		case ART_FFMPEG_PRESET_NVENC_HEVC:
+		{
+			const bool hevc = ( presetId == ART_FFMPEG_PRESET_NVENC_HEVC );
+			const int cq = GetArtFfmpegOption( hevc ? ART_FFOPT_NVHEVC_CQ : ART_FFOPT_NVH264_CQ );
+			const int preset = GetArtFfmpegOption( hevc ? ART_FFOPT_NVHEVC_PRESET : ART_FFOPT_NVH264_PRESET );
+			const int tune = GetArtFfmpegOption( hevc ? ART_FFOPT_NVHEVC_TUNE : ART_FFOPT_NVH264_TUNE );
+			char tuneArg[48] = "";
+			if ( tune > 0 )
+				Q_snprintf( tuneArg, sizeof( tuneArg ), " -tune %s", kArtNvencTunes[tune] );
+			Q_snprintf( encoder, sizeof( encoder ), "-c:v %s -preset %s%s -rc vbr -cq %d -b:v 0 -pix_fmt yuv420p",
+				hevc ? "hevc_nvenc" : "h264_nvenc", kArtNvencPresets[preset], tuneArg, cq );
+			break;
+		}
+
+		default:
+			Q_strncpy( encoder, "-c:v prores_ks -profile:v 3 -pix_fmt yuv422p10le", sizeof( encoder ) );
+			break;
+		}
+
+		Q_snprintf( pOut, static_cast<int>( outSize ), "%s%s \"{OUTPUT_FILE}\"", kInput, encoder );
 	}
 
 	const char *GetArtFfmpegPassOutputExtension( LONG presetId )
@@ -309,8 +462,12 @@ namespace art
 
 		const LONG presetId = InterlockedCompareExchange( &g_nArtFfmpegPreset, 0, 0 );
 		const ArtFfmpegPresetInfo *pPreset = GetArtFfmpegPresetInfo( presetId );
-		const char *pTemplate = ( presetId == ART_FFMPEG_PRESET_CUSTOM && g_szArtFfmpegCustomArgs[0] ) ?
-			g_szArtFfmpegCustomArgs : pPreset->commandTemplate;
+		char builtTemplate[1536];
+		if ( presetId == ART_FFMPEG_PRESET_CUSTOM && !g_szArtFfmpegCustomArgs[0] )
+			BuildArtFfmpegArgumentTemplate( ART_FFMPEG_PRESET_PRORES_422, builtTemplate, sizeof( builtTemplate ) );
+		else
+			BuildArtFfmpegArgumentTemplate( presetId, builtTemplate, sizeof( builtTemplate ) );
+		const char *pTemplate = builtTemplate;
 		const char *pExtension = GetArtFfmpegPassOutputExtension( presetId );
 
 		char fpsBuffer[32];

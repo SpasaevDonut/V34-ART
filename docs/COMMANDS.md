@@ -15,7 +15,8 @@ art_open_folder
 art_prefix <prefix|default>
 art_output_mode <tga|ffmpeg>
 art_ffmpeg_path <path|default>
-art_ffmpeg_preset <prores_422|prores_4444|h264_hq|h264_lossless|nvenc_h264|nvenc_hevc|custom>
+art_ffmpeg_preset <prores_422|prores_4444|h264|nvenc_h264|nvenc_hevc|custom>
+art_ffmpeg_opt <option> <value>
 art_ffmpeg_custom <arguments_template>
 art_ffmpeg_test
 art_ffmpeg_status

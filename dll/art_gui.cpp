@@ -1708,6 +1708,17 @@ namespace
 			"art_queue reserve_mb 256\r\n"
 			"art_tga_compression auto\r\n"
 			"art_output_mode tga\r\n"
+			"art_ffmpeg_opt x264_crf 16\r\n"
+			"art_ffmpeg_opt x264_speed 3\r\n"
+			"art_ffmpeg_opt x264_tune 0\r\n"
+			"art_ffmpeg_opt nvh264_cq 9\r\n"
+			"art_ffmpeg_opt nvh264_preset 4\r\n"
+			"art_ffmpeg_opt nvh264_tune 0\r\n"
+			"art_ffmpeg_opt nvhevc_cq 18\r\n"
+			"art_ffmpeg_opt nvhevc_preset 3\r\n"
+			"art_ffmpeg_opt nvhevc_tune 0\r\n"
+			"art_ffmpeg_opt prores422_profile 3\r\n"
+			"art_ffmpeg_opt prores4444_profile 0\r\n"
 			"art_ffmpeg_preset prores_422\r\n"
 			"art_ffmpeg_path default\r\n"
 			"host_framerate 0\r\n"
@@ -1887,6 +1898,9 @@ namespace
 			if ( safeArgs )
 				AppendFormat( cfg, "art_ffmpeg_custom %s\r\n", g_szArtFfmpegCustomArgs );
 		}
+		for ( int ffOpt = 0; ffOpt < ART_FFOPT_COUNT; ++ffOpt )
+			AppendFormat( cfg, "art_ffmpeg_opt %s %d\r\n",
+				GetArtFfmpegOptionInfo( ffOpt )->name, GetArtFfmpegOption( ffOpt ) );
 		AppendFormat( cfg, "art_ffmpeg_preset %s\r\n",
 			GetArtFfmpegPresetName( currentFfmpegPreset ) );
 		if ( !g_szArtFfmpegPath[0] || !Q_stricmp( g_szArtFfmpegPath, "default" ) || !Q_stricmp( g_szArtFfmpegPath, "ffmpeg.exe" ) )
@@ -6980,9 +6994,65 @@ namespace
 			ResolveArtFfmpegExecutablePath( resolvedPath, sizeof( resolvedPath ), &foundOnDisk );
 			OT::Label( "ffmpeg status:", foundOnDisk ? "FOUND ON DISK" : "NOT FOUND" );
 
-			static const char *presets[] = { "prores422", "prores4444", "x264_lossless", "x264_hq", "nvenc_h264", "nvenc_hevc", "custom" };
-			if ( OT::Combo( "encoder preset", &OT::g_Menu.FfmpegPreset, presets, 7 ) )
-				IssueCommand( "art_ffmpeg_preset %s", presets[OT::g_Menu.FfmpegPreset] );
+			// Always reflect the real engine-side preset instead of a GUI-local copy.
+			static const char *presets[] = { "prores 422", "prores 4444", "x264 (h264)", "nvenc h264", "nvenc hevc", "custom" };
+			const LONG activePreset = InterlockedCompareExchange( &g_nArtFfmpegPreset, 0, 0 );
+			int presetIdx = ( activePreset >= 0 && activePreset < ART_FFMPEG_PRESET_COUNT ) ? static_cast<int>( activePreset ) : 0;
+			if ( OT::Combo( "encoder preset", &presetIdx, presets, ART_FFMPEG_PRESET_COUNT ) )
+				IssueCommand( "art_ffmpeg_preset %s", GetArtFfmpegPresetInfo( presetIdx )->name );
+
+			auto optSlider = [&]( const char *label, int option )
+			{
+				const ArtFfmpegOptionInfo *pInfo = GetArtFfmpegOptionInfo( option );
+				int value = GetArtFfmpegOption( option );
+				if ( OT::SliderInt( label, &value, pInfo->minValue, pInfo->maxValue ) )
+					IssueCommand( "art_ffmpeg_opt %s %d", pInfo->name, value );
+			};
+			auto optCombo = [&]( const char *label, int option, const char *const *names, int count )
+			{
+				const ArtFfmpegOptionInfo *pInfo = GetArtFfmpegOptionInfo( option );
+				int value = GetArtFfmpegOption( option );
+				if ( OT::Combo( label, &value, names, count ) )
+					IssueCommand( "art_ffmpeg_opt %s %d", pInfo->name, value );
+			};
+
+			switch ( presetIdx )
+			{
+			case ART_FFMPEG_PRESET_PRORES_422:
+				optCombo( "prores profile", ART_FFOPT_PRORES422_PROFILE, kArtProres422Profiles, ARRAYSIZE( kArtProres422Profiles ) );
+				break;
+			case ART_FFMPEG_PRESET_PRORES_4444:
+				optCombo( "prores profile", ART_FFOPT_PRORES4444_PROFILE, kArtProres4444Profiles, ARRAYSIZE( kArtProres4444Profiles ) );
+				break;
+			case ART_FFMPEG_PRESET_H264:
+				optSlider( "quality (crf)", ART_FFOPT_X264_CRF );
+				optCombo( "tune", ART_FFOPT_X264_TUNE, kArtX264Tunes, ARRAYSIZE( kArtX264Tunes ) );
+				optCombo( "speed preset", ART_FFOPT_X264_SPEED, kArtX264Speeds, ARRAYSIZE( kArtX264Speeds ) );
+				OT::Label( "mode:", GetArtFfmpegOption( ART_FFOPT_X264_CRF ) == 0 ? "lossless 4:4:4" : "lossy 4:2:0" );
+				break;
+			case ART_FFMPEG_PRESET_NVENC_H264:
+				optSlider( "quality (cq)", ART_FFOPT_NVH264_CQ );
+				optCombo( "tune", ART_FFOPT_NVH264_TUNE, kArtNvencTunes, ARRAYSIZE( kArtNvencTunes ) );
+				optCombo( "speed preset", ART_FFOPT_NVH264_PRESET, kArtNvencPresets, ARRAYSIZE( kArtNvencPresets ) );
+				break;
+			case ART_FFMPEG_PRESET_NVENC_HEVC:
+				optSlider( "quality (cq)", ART_FFOPT_NVHEVC_CQ );
+				optCombo( "tune", ART_FFOPT_NVHEVC_TUNE, kArtNvencTunes, ARRAYSIZE( kArtNvencTunes ) );
+				optCombo( "speed preset", ART_FFOPT_NVHEVC_PRESET, kArtNvencPresets, ARRAYSIZE( kArtNvencPresets ) );
+				break;
+			case ART_FFMPEG_PRESET_CUSTOM:
+			{
+				OT::Label( "custom arguments:" );
+				float cbase_x, cgroup_w;
+				OT::GetGroupMetrics( cbase_x, cgroup_w );
+				ImGui::SetCursorScreenPos( ImVec2( cbase_x + 24.0f, ImGui::GetCursorScreenPos().y ) );
+				ImGui::SetNextItemWidth( cgroup_w - 48.0f );
+				if ( ImGui::InputText( "##ffmpeg_custom_ot", g_Gui.ffmpegCustomArgs, sizeof( g_Gui.ffmpegCustomArgs ), ImGuiInputTextFlags_EnterReturnsTrue ) )
+					ApplyFfmpegCustomArgsField();
+				ImGui::Dummy( ImVec2( 0, 5.0f ) );
+				break;
+			}
+			}
 
 			if ( OT::Button( "test ffmpeg setup" ) )
 			{
