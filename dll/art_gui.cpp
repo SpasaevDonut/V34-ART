@@ -6636,6 +6636,34 @@ namespace
 
 		OT::BeginGroup( "spectator & camera", col_w );
 		{
+			std::vector<std::string> playerLabels;
+			playerLabels.reserve( g_Gui.demoPlayers.size() );
+			for ( size_t i = 0; i < g_Gui.demoPlayers.size(); ++i )
+			{
+				char playerLabel[160];
+				Q_snprintf( playerLabel, sizeof( playerLabel ), "%s  [slot %d]",
+					g_Gui.demoPlayers[i].name.c_str(), g_Gui.demoPlayers[i].entityIndex );
+				playerLabels.push_back( playerLabel );
+			}
+
+			if ( playerLabels.empty() )
+			{
+				const char *emptyMsg = playingDemo ? "no players found" : "load a demo first";
+				const char *emptyItems[] = { emptyMsg };
+				int dummy = 0;
+				OT::Combo( "player", &dummy, emptyItems, 1 );
+			}
+			else
+			{
+				if ( g_Gui.selectedDemoPlayer < 0 || g_Gui.selectedDemoPlayer >= static_cast<int>( playerLabels.size() ) )
+					g_Gui.selectedDemoPlayer = 0;
+				if ( OT::Combo( "player", &g_Gui.selectedDemoPlayer, playerLabels ) )
+				{
+					if ( playingDemo )
+						SpectateSelectedDemoPlayer();
+				}
+			}
+
 			if ( OT::Button( "spectate selected player" ) )
 				SpectateSelectedDemoPlayer();
 
