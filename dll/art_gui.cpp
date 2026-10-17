@@ -3623,6 +3623,606 @@ namespace
 		SeekDemoTick( static_cast<int>( target ) );
 	}
 
+	struct DemoSearchSuggestion
+	{
+		int demoIndex;
+		int score;
+		int matchStart;
+		int matchLen;
+	};
+
+	static bool s_bDemoSuggestOpen = false;
+	static int s_nDemoSuggestHighlight = 0;
+	static int s_nDemoSuggestCount = 0;
+	static char s_szPendingDemoChoice[MAX_PATH] = {};
+	static char s_szHighlightedDemoChoice[MAX_PATH] = {};
+
+	char LowerAsciiChar( char c )
+	{
+		if ( c >= 'A' && c <= 'Z' )
+			return static_cast<char>( c - 'A' + 'a' );
+		if ( c == '\\' )
+			return '/';
+		return c;
+	}
+
+	std::string NormalizeDemoSearchString( const char *pText, bool stripDemExt )
+	{
+		if ( !pText )
+			return std::string();
+		std::string out;
+		for ( const char *p = pText; *p; ++p )
+			out.push_back( LowerAsciiChar( *p ) );
+		while ( !out.empty() && ( out.front() == ' ' || out.front() == '\t' ) )
+			out.erase( out.begin() );
+		while ( !out.empty() && ( out.back() == ' ' || out.back() == '\t' ) )
+			out.pop_back();
+		if ( stripDemExt && out.size() > 4 && out.compare( out.size() - 4, 4, ".dem" ) == 0 )
+			out.resize( out.size() - 4 );
+		return out;
+	}
+
+	bool IsDemoWordSeparator( char c )
+	{
+		return c == ' ' || c == '\t' || c == '_' || c == '-' || c == '.' || c == '/';
+	}
+
+	std::vector<std::string> SplitDemoSearchWords( const std::string &text )
+	{
+		std::vector<std::string> words;
+		std::string current;
+		for ( size_t i = 0; i < text.size(); ++i )
+		{
+			if ( IsDemoWordSeparator( text[i] ) )
+			{
+				if ( !current.empty() )
+				{
+					words.push_back( current );
+					current.clear();
+				}
+			}
+			else
+			{
+				current.push_back( text[i] );
+			}
+		}
+		if ( !current.empty() )
+			words.push_back( current );
+		return words;
+	}
+
+	int ScoreDemoSubsequence( const std::string &token, const std::string &target )
+	{
+		if ( token.empty() || token.size() > target.size() )
+			return 0;
+		size_t ti = 0;
+		int bonus = 0;
+		size_t prevMatch = std::string::npos;
+		for ( size_t i = 0; i < target.size() && ti < token.size(); ++i )
+		{
+			if ( target[i] == token[ti] )
+			{
+				if ( i == 0 || IsDemoWordSeparator( target[i - 1] ) )
+					bonus += 25;
+				if ( prevMatch != std::string::npos && i == prevMatch + 1 )
+					bonus += 20;
+				prevMatch = i;
+				++ti;
+			}
+		}
+		return ( ti == token.size() ) ? ( 120 + bonus ) : 0;
+	}
+
+	int ComputeBoundedLevenshtein( const std::string &a, const std::string &b, int maxDist )
+	{
+		const int n = static_cast<int>( a.size() );
+		const int m = static_cast<int>( b.size() );
+		if ( abs( n - m ) > maxDist )
+			return maxDist + 1;
+		if ( n == 0 )
+			return m;
+		if ( m == 0 )
+			return n;
+
+		int prev[64];
+		int curr[64];
+		if ( m >= 63 )
+			return maxDist + 1;
+
+		for ( int j = 0; j <= m; ++j )
+			prev[j] = j;
+
+		for ( int i = 1; i <= n; ++i )
+		{
+			curr[0] = i;
+			int rowMin = curr[0];
+			for ( int j = 1; j <= m; ++j )
+			{
+				const int cost = ( a[i - 1] == b[j - 1] ) ? 0 : 1;
+				int val = ( std::min )( prev[j] + 1, curr[j - 1] + 1 );
+				val = ( std::min )( val, prev[j - 1] + cost );
+				curr[j] = val;
+				if ( val < rowMin )
+					rowMin = val;
+			}
+			if ( rowMin > maxDist )
+				return maxDist + 1;
+			for ( int j = 0; j <= m; ++j )
+				prev[j] = curr[j];
+		}
+		return prev[m];
+	}
+
+	int ScoreDemoFuzzyToken( const std::string &token, const std::string &baseStem,
+		const std::vector<std::string> &baseWords )
+	{
+		if ( token.size() < 3 )
+			return 0;
+		const int maxDist = ( token.size() >= 5 ) ? 2 : 1;
+		int bestDist = maxDist + 1;
+
+		for ( size_t i = 0; i < baseWords.size(); ++i )
+		{
+			const std::string &word = baseWords[i];
+			const int d = ComputeBoundedLevenshtein( token, word, maxDist );
+			if ( d < bestDist )
+				bestDist = d;
+			if ( word.size() > token.size() )
+			{
+				const std::string prefix = word.substr( 0, token.size() );
+				const int dp = ComputeBoundedLevenshtein( token, prefix, maxDist );
+				if ( dp < bestDist )
+					bestDist = dp;
+			}
+		}
+
+		if ( bestDist > maxDist && baseStem.size() >= token.size() && baseStem.size() <= 48 )
+		{
+			for ( size_t start = 0; start + token.size() <= baseStem.size(); ++start )
+			{
+				const std::string slice = baseStem.substr( start, token.size() );
+				const int ds = ComputeBoundedLevenshtein( token, slice, maxDist );
+				if ( ds < bestDist )
+					bestDist = ds;
+			}
+		}
+
+		if ( bestDist <= maxDist )
+			return 115 - bestDist * 30;
+		return 0;
+	}
+
+	bool ScoreDemoCandidate( const std::string &normQuery,
+		const std::vector<std::string> &queryTokens,
+		const std::string &candidate,
+		int &outScore, int &outMatchStart, int &outMatchLen )
+	{
+		outScore = 0;
+		outMatchStart = -1;
+		outMatchLen = 0;
+
+		const std::string fullLower = NormalizeDemoSearchString( candidate.c_str(), false );
+		const std::string fullStem = NormalizeDemoSearchString( candidate.c_str(), true );
+		const size_t slashPos = fullStem.find_last_of( '/' );
+		const std::string baseStem = ( slashPos == std::string::npos ) ? fullStem : fullStem.substr( slashPos + 1 );
+		const size_t baseOffset = ( slashPos == std::string::npos ) ? 0 : ( slashPos + 1 );
+
+		if ( normQuery.empty() )
+		{
+			outScore = 1;
+			return true;
+		}
+
+		int totalScore = 0;
+
+		if ( baseStem == normQuery || fullStem == normQuery || fullLower == normQuery )
+		{
+			totalScore += 3000;
+			outMatchStart = ( baseStem == normQuery ) ? static_cast<int>( baseOffset ) : 0;
+			outMatchLen = static_cast<int>( normQuery.size() );
+		}
+		else if ( baseStem.compare( 0, normQuery.size(), normQuery ) == 0 )
+		{
+			totalScore += 1600 - static_cast<int>( baseStem.size() - normQuery.size() ) * 2;
+			outMatchStart = static_cast<int>( baseOffset );
+			outMatchLen = static_cast<int>( normQuery.size() );
+		}
+		else if ( fullStem.compare( 0, normQuery.size(), normQuery ) == 0 )
+		{
+			totalScore += 1300 - static_cast<int>( fullStem.size() - normQuery.size() ) * 2;
+			outMatchStart = 0;
+			outMatchLen = static_cast<int>( normQuery.size() );
+		}
+		else
+		{
+			const size_t basePos = baseStem.find( normQuery );
+			if ( basePos != std::string::npos )
+			{
+				totalScore += 950 - static_cast<int>( basePos ) * 4;
+				outMatchStart = static_cast<int>( baseOffset + basePos );
+				outMatchLen = static_cast<int>( normQuery.size() );
+			}
+			else
+			{
+				const size_t fullPos = fullLower.find( normQuery );
+				if ( fullPos != std::string::npos )
+				{
+					totalScore += 700 - static_cast<int>( fullPos ) * 2;
+					outMatchStart = static_cast<int>( fullPos );
+					outMatchLen = static_cast<int>( normQuery.size() );
+				}
+			}
+		}
+
+		const std::vector<std::string> baseWords = SplitDemoSearchWords( baseStem );
+		for ( size_t t = 0; t < queryTokens.size(); ++t )
+		{
+			const std::string &tok = queryTokens[t];
+			int tokenScore = 0;
+
+			for ( size_t w = 0; w < baseWords.size(); ++w )
+			{
+				if ( baseWords[w] == tok )
+				{
+					tokenScore = ( std::max )( tokenScore, 500 );
+				}
+				else if ( baseWords[w].compare( 0, tok.size(), tok ) == 0 )
+				{
+					tokenScore = ( std::max )( tokenScore, 420 );
+				}
+			}
+
+			const size_t bPos = baseStem.find( tok );
+			if ( bPos != std::string::npos )
+			{
+				tokenScore = ( std::max )( tokenScore, 320 - static_cast<int>( bPos ) * 2 );
+				if ( outMatchStart < 0 || static_cast<int>( tok.size() ) > outMatchLen )
+				{
+					outMatchStart = static_cast<int>( baseOffset + bPos );
+					outMatchLen = static_cast<int>( tok.size() );
+				}
+			}
+			else
+			{
+				const size_t fPos = fullLower.find( tok );
+				if ( fPos != std::string::npos )
+				{
+					tokenScore = ( std::max )( tokenScore, 220 - static_cast<int>( fPos ) );
+					if ( outMatchStart < 0 )
+					{
+						outMatchStart = static_cast<int>( fPos );
+						outMatchLen = static_cast<int>( tok.size() );
+					}
+				}
+			}
+
+			if ( tokenScore == 0 )
+			{
+				const int subseq = ScoreDemoSubsequence( tok, baseStem );
+				if ( subseq > tokenScore )
+					tokenScore = subseq;
+			}
+
+			if ( tokenScore == 0 )
+			{
+				const int fuzzy = ScoreDemoFuzzyToken( tok, baseStem, baseWords );
+				if ( fuzzy > tokenScore )
+					tokenScore = fuzzy;
+			}
+
+			if ( tokenScore == 0 )
+				return false;
+
+			totalScore += tokenScore;
+		}
+
+		outScore = totalScore;
+		return outScore > 0;
+	}
+
+	void BuildDemoSuggestions( const char *pQuery, std::vector<DemoSearchSuggestion> &outList, size_t maxResults = 8 )
+	{
+		outList.clear();
+		const std::string normQuery = NormalizeDemoSearchString( pQuery, true );
+		const std::vector<std::string> queryTokens = SplitDemoSearchWords( normQuery );
+
+		for ( size_t i = 0; i < g_Gui.demos.size(); ++i )
+		{
+			int score = 0;
+			int matchStart = -1;
+			int matchLen = 0;
+			if ( ScoreDemoCandidate( normQuery, queryTokens, g_Gui.demos[i], score, matchStart, matchLen ) )
+			{
+				DemoSearchSuggestion item;
+				item.demoIndex = static_cast<int>( i );
+				item.score = score;
+				item.matchStart = matchStart;
+				item.matchLen = matchLen;
+				outList.push_back( item );
+			}
+		}
+
+		std::sort( outList.begin(), outList.end(),
+			[]( const DemoSearchSuggestion &a, const DemoSearchSuggestion &b )
+			{
+				if ( a.score != b.score )
+					return a.score > b.score;
+				return DemoPathLess( g_Gui.demos[a.demoIndex], g_Gui.demos[b.demoIndex] );
+			} );
+
+		if ( outList.size() > maxResults )
+			outList.resize( maxResults );
+	}
+
+	int DemoSearchInputCallback( ImGuiInputTextCallbackData *pData )
+	{
+		if ( !pData )
+			return 0;
+
+		if ( pData->EventFlag == ImGuiInputTextFlags_CallbackAlways )
+		{
+			if ( s_szPendingDemoChoice[0] != '\0' )
+			{
+				pData->DeleteChars( 0, pData->BufTextLen );
+				pData->InsertChars( 0, s_szPendingDemoChoice );
+				pData->SelectionStart = pData->SelectionEnd = pData->CursorPos = pData->BufTextLen;
+				s_szPendingDemoChoice[0] = '\0';
+			}
+		}
+		else if ( pData->EventFlag == ImGuiInputTextFlags_CallbackHistory )
+		{
+			if ( s_nDemoSuggestCount > 0 )
+			{
+				s_bDemoSuggestOpen = true;
+				if ( pData->EventKey == ImGuiKey_DownArrow )
+					s_nDemoSuggestHighlight = ( s_nDemoSuggestHighlight + 1 ) % s_nDemoSuggestCount;
+				else if ( pData->EventKey == ImGuiKey_UpArrow )
+					s_nDemoSuggestHighlight = ( s_nDemoSuggestHighlight + s_nDemoSuggestCount - 1 ) % s_nDemoSuggestCount;
+			}
+		}
+		else if ( pData->EventFlag == ImGuiInputTextFlags_CallbackCompletion )
+		{
+			if ( s_bDemoSuggestOpen && s_szHighlightedDemoChoice[0] != '\0' )
+			{
+				pData->DeleteChars( 0, pData->BufTextLen );
+				pData->InsertChars( 0, s_szHighlightedDemoChoice );
+				pData->SelectionStart = pData->SelectionEnd = pData->CursorPos = pData->BufTextLen;
+				Q_strncpy( g_Gui.demoName, s_szHighlightedDemoChoice, sizeof( g_Gui.demoName ) );
+				for ( size_t i = 0; i < g_Gui.demos.size(); ++i )
+				{
+					if ( !_stricmp( g_Gui.demos[i].c_str(), s_szHighlightedDemoChoice ) )
+					{
+						g_Gui.selectedDemo = static_cast<int>( i );
+						break;
+					}
+				}
+				s_bDemoSuggestOpen = false;
+			}
+		}
+		return 0;
+	}
+
+	void ApplyDemoSearchSuggestion( int demoIndex )
+	{
+		if ( demoIndex < 0 || demoIndex >= static_cast<int>( g_Gui.demos.size() ) )
+			return;
+		g_Gui.selectedDemo = demoIndex;
+		Q_strncpy( g_Gui.demoName, g_Gui.demos[demoIndex].c_str(), sizeof( g_Gui.demoName ) );
+		Q_strncpy( s_szPendingDemoChoice, g_Gui.demos[demoIndex].c_str(), sizeof( s_szPendingDemoChoice ) );
+		s_bDemoSuggestOpen = false;
+	}
+
+	void RenderDemoSearchBox( float xPos, float width )
+	{
+		ImGui::SetCursorScreenPos( ImVec2( xPos, ImGui::GetCursorScreenPos().y ) );
+		ImGui::TextColored( ImVec4( 165.0f / 255.0f, 165.0f / 255.0f, 165.0f / 255.0f, 1.0f ), "search demo" );
+		ImGui::Dummy( ImVec2( 0.0f, 3.0f ) );
+
+		ImGui::SetCursorScreenPos( ImVec2( xPos, ImGui::GetCursorScreenPos().y ) );
+		ImGui::SetNextItemWidth( width );
+
+		ImGui::PushStyleVar( ImGuiStyleVar_FramePadding, ImVec2( 6.0f, 3.0f ) );
+		ImGui::PushStyleVar( ImGuiStyleVar_FrameBorderSize, 1.0f );
+		ImGui::PushStyleColor( ImGuiCol_FrameBg, IM_COL32( 22, 22, 22, 255 ) );
+		ImGui::PushStyleColor( ImGuiCol_Border, s_bDemoSuggestOpen ? ImGui::ColorConvertFloat4ToU32( OT::g_Theme.Accent ) : IM_COL32( 42, 42, 42, 255 ) );
+
+		char prevText[MAX_PATH];
+		Q_strncpy( prevText, g_Gui.demoName, sizeof( prevText ) );
+
+		const ImGuiInputTextFlags inputFlags =
+			ImGuiInputTextFlags_EnterReturnsTrue |
+			ImGuiInputTextFlags_CallbackAlways |
+			ImGuiInputTextFlags_CallbackHistory |
+			ImGuiInputTextFlags_CallbackCompletion;
+
+		const bool enterPressed = ImGui::InputTextWithHint(
+			"##demo_name", "search demo name (e.g. dust2, pov)...",
+			g_Gui.demoName, sizeof( g_Gui.demoName ),
+			inputFlags, DemoSearchInputCallback );
+
+		ImGui::PopStyleColor( 2 );
+		ImGui::PopStyleVar( 2 );
+
+		const ImVec2 inputMin = ImGui::GetItemRectMin();
+		const ImVec2 inputMax = ImGui::GetItemRectMax();
+		const bool inputActive = ImGui::IsItemActive();
+		const bool inputActivated = ImGui::IsItemActivated();
+		const bool inputHovered = ImGui::IsItemHovered();
+		const bool textEdited = strcmp( prevText, g_Gui.demoName ) != 0;
+
+		if ( inputActivated || ( inputHovered && ImGui::IsMouseClicked( ImGuiMouseButton_Left ) ) )
+			s_bDemoSuggestOpen = true;
+
+		if ( textEdited && inputActive )
+		{
+			s_bDemoSuggestOpen = true;
+			s_nDemoSuggestHighlight = 0;
+		}
+
+		if ( inputActive && ImGui::IsKeyPressed( ImGuiKey_Escape ) )
+			s_bDemoSuggestOpen = false;
+
+		std::vector<DemoSearchSuggestion> suggestions;
+		if ( s_bDemoSuggestOpen )
+		{
+			BuildDemoSuggestions( g_Gui.demoName, suggestions, 8 );
+			s_nDemoSuggestCount = static_cast<int>( suggestions.size() );
+			if ( s_nDemoSuggestHighlight >= s_nDemoSuggestCount )
+				s_nDemoSuggestHighlight = ( s_nDemoSuggestCount > 0 ) ? ( s_nDemoSuggestCount - 1 ) : 0;
+			if ( s_nDemoSuggestHighlight < 0 )
+				s_nDemoSuggestHighlight = 0;
+
+			if ( s_nDemoSuggestCount > 0 )
+			{
+				const int hlIdx = suggestions[s_nDemoSuggestHighlight].demoIndex;
+				Q_strncpy( s_szHighlightedDemoChoice, g_Gui.demos[hlIdx].c_str(), sizeof( s_szHighlightedDemoChoice ) );
+			}
+			else
+			{
+				s_szHighlightedDemoChoice[0] = '\0';
+			}
+		}
+		else
+		{
+			s_nDemoSuggestCount = 0;
+			s_szHighlightedDemoChoice[0] = '\0';
+		}
+
+		if ( enterPressed )
+		{
+			if ( s_bDemoSuggestOpen && !suggestions.empty() &&
+				s_nDemoSuggestHighlight >= 0 &&
+				s_nDemoSuggestHighlight < static_cast<int>( suggestions.size() ) )
+			{
+				ApplyDemoSearchSuggestion( suggestions[s_nDemoSuggestHighlight].demoIndex );
+			}
+			s_bDemoSuggestOpen = false;
+		}
+
+		if ( s_bDemoSuggestOpen && !g_Gui.demos.empty() )
+		{
+			const float rowH = 19.0f;
+			const int visibleRows = suggestions.empty() ? 1 : static_cast<int>( suggestions.size() );
+			const float popupH = static_cast<float>( visibleRows ) * rowH + 2.0f;
+			const ImVec2 popupPos( inputMin.x, inputMax.y + 1.0f );
+			const ImVec2 popupSize( width, popupH );
+
+			ImGui::SetNextWindowPos( popupPos, ImGuiCond_Always );
+			ImGui::SetNextWindowSize( popupSize, ImGuiCond_Always );
+			ImGui::PushStyleVar( ImGuiStyleVar_WindowPadding, ImVec2( 0.0f, 0.0f ) );
+			ImGui::PushStyleVar( ImGuiStyleVar_WindowBorderSize, 1.0f );
+			ImGui::PushStyleColor( ImGuiCol_PopupBg, IM_COL32( 16, 16, 16, 250 ) );
+			ImGui::PushStyleColor( ImGuiCol_Border, IM_COL32( 48, 48, 48, 255 ) );
+
+			const ImGuiWindowFlags popupFlags =
+				ImGuiWindowFlags_Tooltip |
+				ImGuiWindowFlags_NoTitleBar |
+				ImGuiWindowFlags_NoMove |
+				ImGuiWindowFlags_NoResize |
+				ImGuiWindowFlags_NoSavedSettings |
+				ImGuiWindowFlags_NoScrollbar |
+				ImGuiWindowFlags_NoFocusOnAppearing;
+
+			bool clickedOutside = false;
+			if ( ImGui::Begin( "##demo_search_suggestions", NULL, popupFlags ) )
+			{
+				ImDrawList *pDraw = ImGui::GetWindowDrawList();
+				pDraw->AddLine( popupPos, ImVec2( popupPos.x + width, popupPos.y ), ImColor( OT::g_Theme.Accent ) );
+
+				const ImVec2 mousePos = ImGui::GetIO().MousePos;
+				const bool mouseInPopup =
+					mousePos.x >= popupPos.x && mousePos.x <= popupPos.x + popupSize.x &&
+					mousePos.y >= popupPos.y && mousePos.y <= popupPos.y + popupSize.y;
+
+				if ( suggestions.empty() )
+				{
+					pDraw->AddText( ImVec2( popupPos.x + 8.0f, popupPos.y + 3.0f ),
+						IM_COL32( 125, 125, 125, 255 ), "no matching demos found" );
+				}
+				else
+				{
+					for ( int i = 0; i < static_cast<int>( suggestions.size() ); ++i )
+					{
+						const DemoSearchSuggestion &sug = suggestions[i];
+						const std::string &demoPath = g_Gui.demos[sug.demoIndex];
+						const ImVec2 rowMin( popupPos.x + 1.0f, popupPos.y + 1.0f + static_cast<float>( i ) * rowH );
+						const ImVec2 rowMax( popupPos.x + width - 1.0f, rowMin.y + rowH );
+
+						const bool rowHovered =
+							mousePos.x >= rowMin.x && mousePos.x < rowMax.x &&
+							mousePos.y >= rowMin.y && mousePos.y < rowMax.y;
+
+						if ( rowHovered && ( ImGui::GetIO().MouseDelta.x != 0.0f || ImGui::GetIO().MouseDelta.y != 0.0f ) )
+							s_nDemoSuggestHighlight = i;
+
+						const bool isHighlighted = ( s_nDemoSuggestHighlight == i ) || rowHovered;
+						if ( isHighlighted )
+						{
+							pDraw->AddRectFilled( rowMin, rowMax, IM_COL32( 30, 32, 38, 255 ) );
+							pDraw->AddRectFilled( rowMin, ImVec2( rowMin.x + 2.0f, rowMax.y ), ImColor( OT::g_Theme.Accent ) );
+						}
+
+						const float textY = rowMin.y + ( rowH - 13.0f ) * 0.5f;
+						const float textStartX = rowMin.x + 8.0f;
+						const ImU32 baseTextCol = isHighlighted ? IM_COL32( 225, 225, 225, 255 ) : IM_COL32( 165, 165, 165, 255 );
+						const ImU32 matchTextCol = ImGui::ColorConvertFloat4ToU32( OT::g_Theme.Accent );
+
+						pDraw->PushClipRect( rowMin, ImVec2( rowMax.x - 4.0f, rowMax.y ), true );
+						if ( sug.matchStart >= 0 && sug.matchLen > 0 &&
+							static_cast<size_t>( sug.matchStart + sug.matchLen ) <= demoPath.size() )
+						{
+							const std::string prefix = demoPath.substr( 0, sug.matchStart );
+							const std::string matched = demoPath.substr( sug.matchStart, sug.matchLen );
+							const std::string suffix = demoPath.substr( sug.matchStart + sug.matchLen );
+
+							float curX = textStartX;
+							if ( !prefix.empty() )
+							{
+								pDraw->AddText( ImVec2( curX, textY ), baseTextCol, prefix.c_str() );
+								curX += ImGui::CalcTextSize( prefix.c_str() ).x;
+							}
+							pDraw->AddText( ImVec2( curX, textY ), matchTextCol, matched.c_str() );
+							curX += ImGui::CalcTextSize( matched.c_str() ).x;
+							if ( !suffix.empty() )
+							{
+								pDraw->AddText( ImVec2( curX, textY ), baseTextCol, suffix.c_str() );
+							}
+						}
+						else
+						{
+							pDraw->AddText( ImVec2( textStartX, textY ), baseTextCol, demoPath.c_str() );
+							if ( g_Gui.demoName[0] != '\0' )
+							{
+								pDraw->AddText( ImVec2( rowMax.x - 14.0f, textY ), IM_COL32( 110, 110, 110, 255 ), "~" );
+							}
+						}
+						pDraw->PopClipRect();
+
+						if ( rowHovered && ImGui::IsMouseClicked( ImGuiMouseButton_Left ) )
+						{
+							ApplyDemoSearchSuggestion( sug.demoIndex );
+							ImGui::ClearActiveID();
+						}
+					}
+				}
+
+				if ( ( !inputActive && !mouseInPopup ) ||
+					( ImGui::IsMouseClicked( ImGuiMouseButton_Left ) && !mouseInPopup && !inputHovered ) )
+				{
+					clickedOutside = true;
+				}
+			}
+			ImGui::End();
+			ImGui::PopStyleColor( 2 );
+			ImGui::PopStyleVar( 2 );
+
+			if ( clickedOutside )
+				s_bDemoSuggestOpen = false;
+		}
+
+		ImGui::Dummy( ImVec2( 0.0f, 5.0f ) );
+	}
+
 
 	// -------------------------------------------------------------------------
 	// Main GUI pages and help popups
@@ -6601,6 +7201,10 @@ namespace
 					Q_strncpy( g_Gui.demoName, g_Gui.demos[g_Gui.selectedDemo].c_str(), sizeof( g_Gui.demoName ) );
 			}
 
+			float r_base_x, r_group_w;
+			OT::GetGroupMetrics( r_base_x, r_group_w );
+			RenderDemoSearchBox( r_base_x + 24.0f, r_group_w - 48.0f );
+
 			if ( OT::Button( "load selected demo" ) )
 			{
 				if ( !g_Gui.demoName[0] && g_Gui.selectedDemo >= 0 &&
@@ -6613,13 +7217,6 @@ namespace
 
 			if ( OT::Button( "refresh demos list" ) )
 				RefreshDemoList();
-
-			float r_base_x, r_group_w;
-			OT::GetGroupMetrics( r_base_x, r_group_w );
-			ImGui::SetCursorScreenPos( ImVec2( r_base_x + 24.0f, ImGui::GetCursorScreenPos().y ) );
-			ImGui::SetNextItemWidth( r_group_w - 48.0f );
-			ImGui::InputTextWithHint( "##demo_name", "or type demo name / path", g_Gui.demoName, sizeof( g_Gui.demoName ) );
-			ImGui::Dummy( ImVec2( 0, 5.0f ) );
 
 			if ( OT::Button( pausedDemo ? "resume demo playback" : "pause demo playback" ) )
 				ToggleDemoPlayback( pausedDemo );
