@@ -37,6 +37,164 @@ struct Theme {
 extern Theme g_Theme;
 extern int g_ActiveKeybindId;
 
+#ifndef _WIN32
+#define VK_LBUTTON 0x01
+#define VK_RBUTTON 0x02
+#define VK_MBUTTON 0x04
+#define VK_XBUTTON1 0x05
+#define VK_XBUTTON2 0x06
+#define VK_BACK 0x08
+#define VK_TAB 0x09
+#define VK_RETURN 0x0D
+#define VK_SHIFT 0x10
+#define VK_CONTROL 0x11
+#define VK_MENU 0x12
+#define VK_ESCAPE 0x1B
+#define VK_SPACE 0x20
+#define VK_PRIOR 0x21
+#define VK_NEXT 0x22
+#define VK_END 0x23
+#define VK_HOME 0x24
+#define VK_LEFT 0x25
+#define VK_UP 0x26
+#define VK_RIGHT 0x27
+#define VK_DOWN 0x28
+#define VK_INSERT 0x2D
+#define VK_DELETE 0x2E
+#define VK_F1 0x70
+#endif
+
+inline int ImGuiKeyToVK(int key) {
+    if (key <= 0) return 0;
+    if (key >= 1 && key <= 5) {
+        static const int mouseVK[] = { 0, VK_LBUTTON, VK_RBUTTON, VK_MBUTTON, VK_XBUTTON1, VK_XBUTTON2 };
+        return mouseVK[key];
+    }
+    if (key >= ImGuiKey_0 && key <= ImGuiKey_9) return '0' + (key - ImGuiKey_0);
+    if (key >= ImGuiKey_A && key <= ImGuiKey_Z) return 'A' + (key - ImGuiKey_A);
+    if (key >= ImGuiKey_F1 && key <= ImGuiKey_F12) return VK_F1 + (key - ImGuiKey_F1);
+    switch (key) {
+        case ImGuiKey_Tab: return VK_TAB;
+        case ImGuiKey_LeftArrow: return VK_LEFT;
+        case ImGuiKey_RightArrow: return VK_RIGHT;
+        case ImGuiKey_UpArrow: return VK_UP;
+        case ImGuiKey_DownArrow: return VK_DOWN;
+        case ImGuiKey_PageUp: return VK_PRIOR;
+        case ImGuiKey_PageDown: return VK_NEXT;
+        case ImGuiKey_Home: return VK_HOME;
+        case ImGuiKey_End: return VK_END;
+        case ImGuiKey_Insert: return VK_INSERT;
+        case ImGuiKey_Delete: return VK_DELETE;
+        case ImGuiKey_Backspace: return VK_BACK;
+        case ImGuiKey_Space: return VK_SPACE;
+        case ImGuiKey_Enter: return VK_RETURN;
+        case ImGuiKey_Escape: return VK_ESCAPE;
+        case ImGuiKey_LeftCtrl: case ImGuiKey_RightCtrl: return VK_CONTROL;
+        case ImGuiKey_LeftShift: case ImGuiKey_RightShift: return VK_SHIFT;
+        case ImGuiKey_LeftAlt: case ImGuiKey_RightAlt: return VK_MENU;
+        default: return 0;
+    }
+}
+
+struct KeybindSetting {
+    int key = 0;
+    int mode = 1; // 0 = hold, 1 = toggle, 2 = always
+    bool was_down = false;
+
+    bool CheckPressed() {
+        if (mode == 2) return true;
+        int vk = ImGuiKeyToVK(key);
+        if (vk <= 0) return false;
+
+#ifdef _WIN32
+        bool currently_down = (GetAsyncKeyState(vk) & 0x8000) != 0;
+#else
+        bool currently_down = false;
+#endif
+        bool just_pressed = currently_down && !was_down;
+        was_down = currently_down;
+
+        if (mode == 1) { // Toggle
+            return just_pressed;
+        } else if (mode == 0) { // Hold
+            return currently_down;
+        }
+        return false;
+    }
+
+    bool CheckReleased() {
+        if (mode != 0) return false;
+        int vk = ImGuiKeyToVK(key);
+        if (vk <= 0) return false;
+#ifdef _WIN32
+        bool currently_down = (GetAsyncKeyState(vk) & 0x8000) != 0;
+#else
+        bool currently_down = false;
+#endif
+        bool just_released = !currently_down && was_down;
+        return just_released;
+    }
+};
+
+struct MenuKeybinds {
+    KeybindSetting Record = { ImGuiKey_F9, 1 };
+    KeybindSetting DemoPause = { ImGuiKey_P, 1 };
+    KeybindSetting CampathAdd = { ImGuiKey_K, 1 };
+};
+
+struct MenuState {
+    int CurrentTab = 0;
+    MenuKeybinds Binds;
+
+    // Tab state
+    bool PassesEnable = true;
+    bool VmBgActive = false;
+    bool PlBgActive = false;
+    bool ObjWorldActive = false;
+    bool ObjSkyActive = false;
+    bool WorldWeapons = true;
+    int DepthMode = 0;
+
+    bool VisualsEnable = true;
+    int ChamsStyle = 0;
+    bool Thirdperson = false;
+    int ThirdpersonDist = 120;
+
+    int OutputMode = 0;
+    bool TakeManifest = true;
+    bool AutoValidate = true;
+    int QueueFiles = 500;
+    int QueueMb = 256;
+    int FfmpegPreset = 0;
+    int FfmpegCrf = 17;
+
+    bool HlaeEnable = true;
+    bool AgrAutoExport = false;
+
+    bool AccentDummy = true;
+    int ColorPreset = 0;
+    int ConfigSlot = 0;
+
+    int MenuOpacity = 90;
+    bool VerboseOverlay = false;
+};
+
+extern MenuState g_Menu;
+
+inline float GetMenuAlpha() {
+    int op = g_Menu.MenuOpacity;
+    if (op < 20) op = 20;
+    if (op > 100) op = 100;
+    return (float)op / 100.0f;
+}
+
+inline int ScaleAlpha(int base_alpha) {
+    int a = (int)((float)base_alpha * GetMenuAlpha() + 0.5f);
+    if (a < 0) a = 0;
+    if (a > 255) a = 255;
+    return a;
+}
+
 inline void InitStyle() {
     ImGuiStyle& style = ImGui::GetStyle();
 
@@ -67,39 +225,50 @@ inline void InitStyle() {
     style.AntiAliasedFill = false;
     style.AntiAliasedLinesUseTex = false;
 
+    const float menu_alpha = GetMenuAlpha();
     ImVec4* colors = style.Colors;
     colors[ImGuiCol_Text] = g_Theme.TextActive;
     colors[ImGuiCol_TextDisabled] = g_Theme.TextInactive;
-    colors[ImGuiCol_WindowBg] = g_Theme.WindowBg;
+    colors[ImGuiCol_WindowBg] = ImVec4(g_Theme.WindowBg.x, g_Theme.WindowBg.y, g_Theme.WindowBg.z, menu_alpha);
     colors[ImGuiCol_ChildBg] = ImVec4(0, 0, 0, 0);
     colors[ImGuiCol_PopupBg] = ImVec4(18.0f / 255.0f, 18.0f / 255.0f, 18.0f / 255.0f, 1.0f);
     colors[ImGuiCol_Border] = g_Theme.WidgetBorder;
-    colors[ImGuiCol_FrameBg] = g_Theme.WidgetBg;
-    colors[ImGuiCol_FrameBgHovered] = ImVec4(28.0f / 255.0f, 28.0f / 255.0f, 28.0f / 255.0f, 1.0f);
-    colors[ImGuiCol_FrameBgActive] = ImVec4(34.0f / 255.0f, 34.0f / 255.0f, 34.0f / 255.0f, 1.0f);
+    colors[ImGuiCol_FrameBg] = ImVec4(g_Theme.WidgetBg.x, g_Theme.WidgetBg.y, g_Theme.WidgetBg.z, menu_alpha);
+    colors[ImGuiCol_FrameBgHovered] = ImVec4(28.0f / 255.0f, 28.0f / 255.0f, 28.0f / 255.0f, menu_alpha);
+    colors[ImGuiCol_FrameBgActive] = ImVec4(34.0f / 255.0f, 34.0f / 255.0f, 34.0f / 255.0f, menu_alpha);
     colors[ImGuiCol_Header] = g_Theme.Accent;
     colors[ImGuiCol_HeaderHovered] = ImVec4(g_Theme.Accent.x, g_Theme.Accent.y, g_Theme.Accent.z, 0.70f);
     colors[ImGuiCol_HeaderActive] = g_Theme.Accent;
-    colors[ImGuiCol_Button] = g_Theme.WidgetBg;
-    colors[ImGuiCol_ButtonHovered] = ImVec4(28.0f / 255.0f, 28.0f / 255.0f, 28.0f / 255.0f, 1.0f);
-    colors[ImGuiCol_ButtonActive] = ImVec4(34.0f / 255.0f, 34.0f / 255.0f, 34.0f / 255.0f, 1.0f);
+    colors[ImGuiCol_Button] = ImVec4(g_Theme.WidgetBg.x, g_Theme.WidgetBg.y, g_Theme.WidgetBg.z, menu_alpha);
+    colors[ImGuiCol_ButtonHovered] = ImVec4(28.0f / 255.0f, 28.0f / 255.0f, 28.0f / 255.0f, menu_alpha);
+    colors[ImGuiCol_ButtonActive] = ImVec4(34.0f / 255.0f, 34.0f / 255.0f, 34.0f / 255.0f, menu_alpha);
 }
 
 inline void RenderWindowFrame(ImVec2 pos, ImVec2 size) {
     ImDrawList* draw = ImGui::GetWindowDrawList();
+    const int a = ScaleAlpha(255);
+
+    // Fill outer frame strips around the content box without overlapping the content box
+    ImVec2 box_min(pos.x + 30.0f, pos.y + 45.0f);
+    ImVec2 box_max(pos.x + size.x - 30.0f, pos.y + size.y - 30.0f);
+    ImU32 frame_bg = IM_COL32(14, 14, 14, a);
+    draw->AddRectFilled(pos, ImVec2(pos.x + size.x, box_min.y), frame_bg);
+    draw->AddRectFilled(ImVec2(pos.x, box_max.y), ImVec2(pos.x + size.x, pos.y + size.y), frame_bg);
+    draw->AddRectFilled(ImVec2(pos.x, box_min.y), ImVec2(box_min.x, box_max.y), frame_bg);
+    draw->AddRectFilled(ImVec2(box_max.x, box_min.y), ImVec2(pos.x + size.x, box_max.y), frame_bg);
 
     // Multi-layered classic Onetap borders:
     // Outer black line
-    draw->AddRect(pos, ImVec2(pos.x + size.x, pos.y + size.y), IM_COL32(0, 0, 0, 255));
+    draw->AddRect(pos, ImVec2(pos.x + size.x, pos.y + size.y), IM_COL32(0, 0, 0, a));
     // 1st highlight line
-    draw->AddRect(ImVec2(pos.x + 1, pos.y + 1), ImVec2(pos.x + size.x - 1, pos.y + size.y - 1), IM_COL32(54, 54, 54, 255));
+    draw->AddRect(ImVec2(pos.x + 1, pos.y + 1), ImVec2(pos.x + size.x - 1, pos.y + size.y - 1), IM_COL32(54, 54, 54, a));
     // 2px dark gray band
-    draw->AddRect(ImVec2(pos.x + 2, pos.y + 2), ImVec2(pos.x + size.x - 2, pos.y + size.y - 2), IM_COL32(28, 28, 28, 255));
-    draw->AddRect(ImVec2(pos.x + 3, pos.y + 3), ImVec2(pos.x + size.x - 3, pos.y + size.y - 3), IM_COL32(28, 28, 28, 255));
+    draw->AddRect(ImVec2(pos.x + 2, pos.y + 2), ImVec2(pos.x + size.x - 2, pos.y + size.y - 2), IM_COL32(28, 28, 28, a));
+    draw->AddRect(ImVec2(pos.x + 3, pos.y + 3), ImVec2(pos.x + size.x - 3, pos.y + size.y - 3), IM_COL32(28, 28, 28, a));
     // 2nd highlight line
-    draw->AddRect(ImVec2(pos.x + 4, pos.y + 4), ImVec2(pos.x + size.x - 4, pos.y + size.y - 4), IM_COL32(56, 56, 56, 255));
+    draw->AddRect(ImVec2(pos.x + 4, pos.y + 4), ImVec2(pos.x + size.x - 4, pos.y + size.y - 4), IM_COL32(56, 56, 56, a));
     // Inner black border
-    draw->AddRect(ImVec2(pos.x + 5, pos.y + 5), ImVec2(pos.x + size.x - 5, pos.y + size.y - 5), IM_COL32(0, 0, 0, 255));
+    draw->AddRect(ImVec2(pos.x + 5, pos.y + 5), ImVec2(pos.x + size.x - 5, pos.y + size.y - 5), IM_COL32(0, 0, 0, a));
 }
 
 inline bool BeginMenuWindow(const char* name, bool* p_open, ImVec2 size = ImVec2(680, 790)) {
@@ -107,10 +276,11 @@ inline bool BeginMenuWindow(const char* name, bool* p_open, ImVec2 size = ImVec2
     ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar |
                              ImGuiWindowFlags_NoResize |
                              ImGuiWindowFlags_NoScrollbar |
-                             ImGuiWindowFlags_NoCollapse;
+                             ImGuiWindowFlags_NoCollapse |
+                             ImGuiWindowFlags_NoBackground;
 
     ImGui::GetIO().ConfigWindowsMoveFromTitleBarOnly = false;
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, g_Theme.WindowBg);
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0, 0, 0, 0));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
     bool open = ImGui::Begin(name, p_open, flags);
     if (!open) {
@@ -166,9 +336,9 @@ inline bool TabBar(const char* const tabs[], int count, int* current_tab) {
         bool active = (*current_tab == i);
 
         if (active) {
-            draw->AddRectFilled(tab_min, tab_max, IM_COL32(22, 25, 32, 180));
+            draw->AddRectFilled(tab_min, tab_max, IM_COL32(22, 25, 32, ScaleAlpha(180)));
         } else if (hovered) {
-            draw->AddRectFilled(tab_min, tab_max, IM_COL32(20, 20, 24, 100));
+            draw->AddRectFilled(tab_min, tab_max, IM_COL32(20, 20, 24, ScaleAlpha(100)));
         }
 
         float text_w = ImGui::CalcTextSize(tabs[i]).x;
@@ -187,7 +357,7 @@ inline bool TabBar(const char* const tabs[], int count, int* current_tab) {
         } else {
             draw->AddLine(ImVec2(current_x + 1.0f, bar_y + bar_h),
                           ImVec2(current_x + tab_w - 1.0f, bar_y + bar_h),
-                          IM_COL32(36, 36, 36, 255));
+                          IM_COL32(36, 36, 36, ScaleAlpha(255)));
         }
     }
 
@@ -210,11 +380,11 @@ inline void BeginContentBox(ImVec2* out_pos = nullptr, ImVec2* out_size = nullpt
     s_ContentBoxPos = ImVec2(box_x, box_y);
     s_ContentBoxSize = ImVec2(box_w, box_h);
 
-    // Inner content box background (pitch black #090909)
-    draw->AddRectFilled(s_ContentBoxPos, ImVec2(box_x + box_w, box_y + box_h), IM_COL32(9, 9, 9, 255));
+    // Inner content box background (pitch black #090909 with configurable opacity)
+    draw->AddRectFilled(s_ContentBoxPos, ImVec2(box_x + box_w, box_y + box_h), IM_COL32(9, 9, 9, ScaleAlpha(255)));
 
     // Inner content box 1px outline border (#262626)
-    draw->AddRect(s_ContentBoxPos, ImVec2(box_x + box_w, box_y + box_h), IM_COL32(38, 38, 38, 255));
+    draw->AddRect(s_ContentBoxPos, ImVec2(box_x + box_w, box_y + box_h), IM_COL32(38, 38, 38, ScaleAlpha(255)));
 
     if (out_pos) *out_pos = s_ContentBoxPos;
     if (out_size) *out_size = s_ContentBoxSize;
@@ -222,7 +392,7 @@ inline void BeginContentBox(ImVec2* out_pos = nullptr, ImVec2* out_size = nullpt
 
 inline void EndContentBox() {
     ImDrawList* draw = ImGui::GetWindowDrawList();
-    draw->AddRect(s_ContentBoxPos, ImVec2(s_ContentBoxPos.x + s_ContentBoxSize.x, s_ContentBoxPos.y + s_ContentBoxSize.y), IM_COL32(38, 38, 38, 255));
+    draw->AddRect(s_ContentBoxPos, ImVec2(s_ContentBoxPos.x + s_ContentBoxSize.x, s_ContentBoxPos.y + s_ContentBoxSize.y), IM_COL32(38, 38, 38, ScaleAlpha(255)));
     ImGui::SetCursorScreenPos(ImVec2(s_ContentBoxPos.x + s_ContentBoxSize.x, s_ContentBoxPos.y + s_ContentBoxSize.y));
     ImGui::Dummy(ImVec2(0.0f, 0.0f));
 }
@@ -523,14 +693,15 @@ inline bool CheckboxColor(const char* label, bool* v, float col[4]) {
     draw->AddRectFilled(col_bb.Min, col_bb.Max, ImColor(col[0], col[1], col[2], col[3]));
     draw->AddRect(col_bb.Min, col_bb.Max, col_hovered ? IM_COL32(200, 200, 200, 255) : IM_COL32(0, 0, 0, 255));
 
+    bool col_changed = false;
     if (ImGui::BeginPopup(popup_id)) {
-        ImGui::ColorPicker4("##picker", col, ImGuiColorEditFlags_NoSidePreview | ImGuiColorEditFlags_NoInputs);
+        col_changed = ImGui::ColorPicker4("##picker", col, ImGuiColorEditFlags_NoSidePreview | ImGuiColorEditFlags_NoInputs);
         ImGui::EndPopup();
     }
 
     ImGui::Dummy(ImVec2(0, 4.0f));
 
-    return check_pressed;
+    return check_pressed || col_changed;
 }
 
 inline bool Combo(const char* label, int* current_item, const char* const items[], int items_count) {
@@ -1017,148 +1188,5 @@ inline bool Keybind(const char* label, int* key, int* mode) {
 
     return true;
 }
-
-#ifndef _WIN32
-#define VK_LBUTTON 0x01
-#define VK_RBUTTON 0x02
-#define VK_MBUTTON 0x04
-#define VK_XBUTTON1 0x05
-#define VK_XBUTTON2 0x06
-#define VK_BACK 0x08
-#define VK_TAB 0x09
-#define VK_RETURN 0x0D
-#define VK_SHIFT 0x10
-#define VK_CONTROL 0x11
-#define VK_MENU 0x12
-#define VK_ESCAPE 0x1B
-#define VK_SPACE 0x20
-#define VK_PRIOR 0x21
-#define VK_NEXT 0x22
-#define VK_END 0x23
-#define VK_HOME 0x24
-#define VK_LEFT 0x25
-#define VK_UP 0x26
-#define VK_RIGHT 0x27
-#define VK_DOWN 0x28
-#define VK_INSERT 0x2D
-#define VK_DELETE 0x2E
-#define VK_F1 0x70
-#endif
-
-inline int ImGuiKeyToVK(int key) {
-    if (key <= 0) return 0;
-    if (key >= 1 && key <= 5) {
-        static const int mouseVK[] = { 0, VK_LBUTTON, VK_RBUTTON, VK_MBUTTON, VK_XBUTTON1, VK_XBUTTON2 };
-        return mouseVK[key];
-    }
-    if (key >= ImGuiKey_0 && key <= ImGuiKey_9) return '0' + (key - ImGuiKey_0);
-    if (key >= ImGuiKey_A && key <= ImGuiKey_Z) return 'A' + (key - ImGuiKey_A);
-    if (key >= ImGuiKey_F1 && key <= ImGuiKey_F12) return VK_F1 + (key - ImGuiKey_F1);
-    switch (key) {
-        case ImGuiKey_Tab: return VK_TAB;
-        case ImGuiKey_LeftArrow: return VK_LEFT;
-        case ImGuiKey_RightArrow: return VK_RIGHT;
-        case ImGuiKey_UpArrow: return VK_UP;
-        case ImGuiKey_DownArrow: return VK_DOWN;
-        case ImGuiKey_PageUp: return VK_PRIOR;
-        case ImGuiKey_PageDown: return VK_NEXT;
-        case ImGuiKey_Home: return VK_HOME;
-        case ImGuiKey_End: return VK_END;
-        case ImGuiKey_Insert: return VK_INSERT;
-        case ImGuiKey_Delete: return VK_DELETE;
-        case ImGuiKey_Backspace: return VK_BACK;
-        case ImGuiKey_Space: return VK_SPACE;
-        case ImGuiKey_Enter: return VK_RETURN;
-        case ImGuiKey_Escape: return VK_ESCAPE;
-        case ImGuiKey_LeftCtrl: case ImGuiKey_RightCtrl: return VK_CONTROL;
-        case ImGuiKey_LeftShift: case ImGuiKey_RightShift: return VK_SHIFT;
-        case ImGuiKey_LeftAlt: case ImGuiKey_RightAlt: return VK_MENU;
-        default: return 0;
-    }
-}
-
-struct KeybindSetting {
-    int key = 0;
-    int mode = 1; // 0 = hold, 1 = toggle, 2 = always
-    bool was_down = false;
-
-    bool CheckPressed() {
-        if (mode == 2) return true;
-        int vk = ImGuiKeyToVK(key);
-        if (vk <= 0) return false;
-
-#ifdef _WIN32
-        bool currently_down = (GetAsyncKeyState(vk) & 0x8000) != 0;
-#else
-        bool currently_down = false;
-#endif
-        bool just_pressed = currently_down && !was_down;
-        was_down = currently_down;
-
-        if (mode == 1) { // Toggle
-            return just_pressed;
-        } else if (mode == 0) { // Hold
-            return currently_down;
-        }
-        return false;
-    }
-
-    bool CheckReleased() {
-        if (mode != 0) return false;
-        int vk = ImGuiKeyToVK(key);
-        if (vk <= 0) return false;
-#ifdef _WIN32
-        bool currently_down = (GetAsyncKeyState(vk) & 0x8000) != 0;
-#else
-        bool currently_down = false;
-#endif
-        bool just_released = !currently_down && was_down;
-        return just_released;
-    }
-};
-
-struct MenuKeybinds {
-    KeybindSetting Record = { ImGuiKey_F9, 1 };
-    KeybindSetting DemoPause = { ImGuiKey_P, 1 };
-    KeybindSetting CampathAdd = { ImGuiKey_K, 1 };
-};
-
-struct MenuState {
-    int CurrentTab = 0;
-    MenuKeybinds Binds;
-
-    // Tab state
-    bool PassesEnable = true;
-    bool VmBgActive = false;
-    bool PlBgActive = false;
-    bool ObjWorldActive = false;
-    bool ObjSkyActive = false;
-    bool WorldWeapons = true;
-    int DepthMode = 0;
-
-    bool VisualsEnable = true;
-    int ChamsStyle = 0;
-    bool Thirdperson = false;
-    int ThirdpersonDist = 120;
-
-    int OutputMode = 0;
-    bool TakeManifest = true;
-    bool AutoValidate = true;
-    int QueueFiles = 500;
-    int QueueMb = 256;
-    int FfmpegPreset = 0;
-    int FfmpegCrf = 17;
-
-    bool HlaeEnable = true;
-    bool AgrAutoExport = false;
-
-    bool AccentDummy = true;
-    int ColorPreset = 0;
-    int ConfigSlot = 0;
-
-    int MenuOpacity = 100;
-};
-
-extern MenuState g_Menu;
 
 } // namespace OT

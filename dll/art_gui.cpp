@@ -6567,7 +6567,9 @@ namespace
 
 			bool hud = InterlockedCompareExchange( &g_bArtStatisticsOverlayEnabled, FALSE, FALSE ) != FALSE;
 			if ( OT::Checkbox( "statistics overlay", &hud ) )
-				InterlockedExchange( &g_bArtStatisticsOverlayEnabled, hud ? FALSE : TRUE );
+				IssueCommand( "art_overlay %s", hud ? "on" : "off" );
+
+			OT::Checkbox( "verbose overlay details", &OT::g_Menu.VerboseOverlay );
 		}
 		OT::EndGroup();
 
@@ -7365,6 +7367,8 @@ namespace
 
 			if ( OT::Button( "reset accent to default blue" ) )
 				OT::g_Theme.Accent = ImVec4( 77.f / 255.f, 123.f / 255.f, 255.f / 255.f, 1.f );
+
+			OT::SliderInt( "menu opacity", &OT::g_Menu.MenuOpacity, 20, 100, "%" );
 		}
 		OT::EndGroup();
 
@@ -7395,12 +7399,16 @@ namespace
 			if ( OT::Checkbox( "in-game statistics overlay", &statisticsOverlay ) )
 				IssueCommand( "art_overlay %s", statisticsOverlay ? "on" : "off" );
 
+			OT::Checkbox( "verbose overlay details", &OT::g_Menu.VerboseOverlay );
+
 			bool debugLogging = IsDebugLoggingEnabled();
 			if ( OT::Checkbox( "diagnostic logging", &debugLogging ) )
 				IssueCommand( "art_debug %s", debugLogging ? "on" : "off" );
 
 			if ( OT::Button( "flush log to disk" ) )
 				IssueCommand( "art_flush" );
+
+			OT::SliderInt( "menu opacity", &OT::g_Menu.MenuOpacity, 20, 100, "%" );
 		}
 		OT::EndGroup();
 
@@ -7500,6 +7508,7 @@ namespace
 	{
 		const bool recording = InterlockedCompareExchange( &g_bRecording, FALSE, FALSE ) != FALSE;
 		const bool validating = IsArtValidationRunning();
+		const bool verbose = OT::g_Menu.VerboseOverlay;
 		char bytes[48];
 		FormatArtByteCount( g_ArtRecordingStats.takeBytes, bytes, sizeof( bytes ) );
 		char text[1024];
@@ -7507,47 +7516,56 @@ namespace
 		{
 			const DWORD elapsedMs = GetArtRecordingElapsedMs();
 			const DWORD elapsedSeconds = elapsedMs / 1000;
-			const LONG mask = InterlockedCompareExchange( &g_nRecordMask, 0, 0 );
-			const std::string passNames = MaskNames( mask );
-			char queueBytes[48];
-			FormatArtByteCount( g_ArtPipelineStats.pendingBytes,
-				queueBytes, sizeof( queueBytes ) );
 			const double captureRate = elapsedMs ?
 				static_cast<double>( g_ArtRecordingStats.takeFrames ) * 1000.0 / elapsedMs : 0.0;
-			double averageMs[ART_TIMING_COUNT] = {};
-			for ( int i = 0; i < ART_TIMING_COUNT; ++i )
+			if ( !verbose )
 			{
-				const ArtStageTimingStatistics &timing = g_ArtPipelineStats.stages[i];
-				averageMs[i] = timing.takeSamples ?
-					static_cast<double>( timing.takeTotalMicroseconds ) /
-						timing.takeSamples / 1000.0 : 0.0;
+				_snprintf_s( text, sizeof( text ), _TRUNCATE,
+					"REC  |  Frame %04d  |  %02lu:%02lu  |  %.1f fps  |  %s",
+					g_nFrame, ( elapsedSeconds / 60 ), elapsedSeconds % 60, captureRate, bytes );
 			}
-			const double compressionSaved = g_ArtPipelineStats.takeUncompressedBytes ?
-				100.0 * ( 1.0 -
-					static_cast<double>( g_ArtPipelineStats.takeOutputBytes ) /
-					static_cast<double>( g_ArtPipelineStats.takeUncompressedBytes ) ) : 0.0;
-			_snprintf_s( text, sizeof( text ), _TRUNCATE,
-				"ART RECORDING\nTake: %s\nFrame %04d  |  %lu files  |  %s  |  %.2f fps\n"
-				"%02lu:%02lu:%02lu  |  Passes: %s\n"
-				"Queue: %lu/%ld files  |  %s/%ld MiB  |  %lu flushes\n"
-				"Average ms: render %.2f  read %.2f  encode %.2f  write %.2f  queue %.2f\n"
-				"TGA: %s  |  %.1f%% saved  |  allocation retries %lu",
-				g_ArtRecordingStats.takeDisplayPath[0] ?
-					g_ArtRecordingStats.takeDisplayPath : "<starting>",
-				g_nFrame, g_ArtRecordingStats.takeFiles, bytes,
-				captureRate, elapsedSeconds / 3600, ( elapsedSeconds / 60 ) % 60,
-				elapsedSeconds % 60, passNames.c_str(),
-				g_ArtPipelineStats.pendingFiles,
-				InterlockedCompareExchange( &g_ArtQueueOptions.maxFiles, 0, 0 ),
-				queueBytes,
-				InterlockedCompareExchange( &g_ArtQueueOptions.maxMegabytes, 0, 0 ),
-				g_ArtPipelineStats.takeFlushes,
-				averageMs[ART_TIMING_RENDER], averageMs[ART_TIMING_READ],
-				averageMs[ART_TIMING_ENCODE], averageMs[ART_TIMING_WRITE],
-				averageMs[ART_TIMING_QUEUE],
-				ArtTgaCompressionModeName( InterlockedCompareExchange(
-					&g_nArtTgaCompressionMode, 0, 0 ) ),
-				compressionSaved, g_ArtPipelineStats.takeAllocationRetries );
+			else
+			{
+				const LONG mask = InterlockedCompareExchange( &g_nRecordMask, 0, 0 );
+				const std::string passNames = MaskNames( mask );
+				char queueBytes[48];
+				FormatArtByteCount( g_ArtPipelineStats.pendingBytes,
+					queueBytes, sizeof( queueBytes ) );
+				double averageMs[ART_TIMING_COUNT] = {};
+				for ( int i = 0; i < ART_TIMING_COUNT; ++i )
+				{
+					const ArtStageTimingStatistics &timing = g_ArtPipelineStats.stages[i];
+					averageMs[i] = timing.takeSamples ?
+						static_cast<double>( timing.takeTotalMicroseconds ) /
+							timing.takeSamples / 1000.0 : 0.0;
+				}
+				const double compressionSaved = g_ArtPipelineStats.takeUncompressedBytes ?
+					100.0 * ( 1.0 -
+						static_cast<double>( g_ArtPipelineStats.takeOutputBytes ) /
+						static_cast<double>( g_ArtPipelineStats.takeUncompressedBytes ) ) : 0.0;
+				_snprintf_s( text, sizeof( text ), _TRUNCATE,
+					"ART RECORDING\nTake: %s\nFrame %04d  |  %lu files  |  %s  |  %.2f fps\n"
+					"%02lu:%02lu:%02lu  |  Passes: %s\n"
+					"Queue: %lu/%ld files  |  %s/%ld MiB  |  %lu flushes\n"
+					"Average ms: render %.2f  read %.2f  encode %.2f  write %.2f  queue %.2f\n"
+					"TGA: %s  |  %.1f%% saved  |  allocation retries %lu",
+					g_ArtRecordingStats.takeDisplayPath[0] ?
+						g_ArtRecordingStats.takeDisplayPath : "<starting>",
+					g_nFrame, g_ArtRecordingStats.takeFiles, bytes,
+					captureRate, elapsedSeconds / 3600, ( elapsedSeconds / 60 ) % 60,
+					elapsedSeconds % 60, passNames.c_str(),
+					g_ArtPipelineStats.pendingFiles,
+					InterlockedCompareExchange( &g_ArtQueueOptions.maxFiles, 0, 0 ),
+					queueBytes,
+					InterlockedCompareExchange( &g_ArtQueueOptions.maxMegabytes, 0, 0 ),
+					g_ArtPipelineStats.takeFlushes,
+					averageMs[ART_TIMING_RENDER], averageMs[ART_TIMING_READ],
+					averageMs[ART_TIMING_ENCODE], averageMs[ART_TIMING_WRITE],
+					averageMs[ART_TIMING_QUEUE],
+					ArtTgaCompressionModeName( InterlockedCompareExchange(
+						&g_nArtTgaCompressionMode, 0, 0 ) ),
+					compressionSaved, g_ArtPipelineStats.takeAllocationRetries );
+			}
 		}
 		else if ( validating )
 		{
@@ -7555,24 +7573,42 @@ namespace
 				&g_ArtValidationProgress.completedFiles, 0, 0 );
 			const LONG total = InterlockedCompareExchange(
 				&g_ArtValidationProgress.totalFiles, 0, 0 );
-			_snprintf_s( text, sizeof( text ), _TRUNCATE,
-				"ART VALIDATING\n%s\n%ld / %ld files  |  %.1f%%  |  %.2f s",
-				ArtValidationPhaseName( InterlockedCompareExchange(
-					&g_ArtValidationProgress.phase, 0, 0 ) ),
-				completed, total, GetArtValidationProgressFraction() * 100.0f,
-				GetArtValidationElapsedMs() / 1000.0f );
+			if ( !verbose )
+			{
+				_snprintf_s( text, sizeof( text ), _TRUNCATE,
+					"ART VALIDATING  |  %ld / %ld (%.0f%%)",
+					completed, total, GetArtValidationProgressFraction() * 100.0f );
+			}
+			else
+			{
+				_snprintf_s( text, sizeof( text ), _TRUNCATE,
+					"ART VALIDATING\n%s\n%ld / %ld files  |  %.1f%%  |  %.2f s",
+					ArtValidationPhaseName( InterlockedCompareExchange(
+						&g_ArtValidationProgress.phase, 0, 0 ) ),
+					completed, total, GetArtValidationProgressFraction() * 100.0f,
+					GetArtValidationElapsedMs() / 1000.0f );
+			}
 		}
 		else if ( g_ArtRecordingStats.takeDisplayPath[0] )
 		{
-			const char *pValidation = !g_ArtValidationResult.hasResult ? "not validated" :
-				g_ArtValidationResult.passed ? "validation PASS" : "validation FAIL";
-			_snprintf_s( text, sizeof( text ), _TRUNCATE,
-				"ART READY\nLast take: %lu frames  |  %lu files  |  %s\n%s",
-				g_ArtRecordingStats.takeFrames, g_ArtRecordingStats.takeFiles, bytes, pValidation );
+			if ( !verbose )
+			{
+				_snprintf_s( text, sizeof( text ), _TRUNCATE,
+					"ART READY  |  Last: %lu frames (%s)",
+					g_ArtRecordingStats.takeFrames, bytes );
+			}
+			else
+			{
+				const char *pValidation = !g_ArtValidationResult.hasResult ? "not validated" :
+					g_ArtValidationResult.passed ? "validation PASS" : "validation FAIL";
+				_snprintf_s( text, sizeof( text ), _TRUNCATE,
+					"ART READY\nLast take: %lu frames  |  %lu files  |  %s\n%s",
+					g_ArtRecordingStats.takeFrames, g_ArtRecordingStats.takeFiles, bytes, pValidation );
+			}
 		}
 		else
 		{
-			Q_strncpy( text, "ART READY\nNo footage recorded this session.", sizeof( text ) );
+			Q_strncpy( text, verbose ? "ART READY\nNo footage recorded this session." : "ART READY", sizeof( text ) );
 		}
 
 		ArtHlaeStatus hlaeStatus;
@@ -7585,17 +7621,33 @@ namespace
 		std::string overlayText( text );
 		if ( hlaeStatus.enabled && hlaeCameraActivity )
 		{
-			AppendFormat( overlayText,
-				"\nHLAE: campath %s | mirv_input %s",
-				hlaeStatus.campathEnabled ? "ON" : "off",
-				hlaeStatus.inputCamera ? "ON" : "off" );
-			AppendFormat( overlayText,
-				"\nCAM exp %s / imp %s | AGR %s | BVH exp %s / imp %s",
-				hlaeStatus.camioExporting ? "ON" : "off",
-				hlaeStatus.camioImporting ? "ON" : "off",
-				hlaeStatus.agrRecording ? "REC" : "off",
-				hlaeStatus.camexportRecording ? "ON" : "off",
-				hlaeStatus.camimportActive ? "ON" : "off" );
+			if ( !verbose )
+			{
+				std::string activeHlae;
+				if ( hlaeStatus.campathEnabled ) activeHlae += "campath ";
+				if ( hlaeStatus.inputCamera ) activeHlae += "mirv_input ";
+				if ( hlaeStatus.agrRecording ) activeHlae += "AGR ";
+				if ( hlaeStatus.camioExporting ) activeHlae += "CAM-exp ";
+				if ( hlaeStatus.camioImporting ) activeHlae += "CAM-imp ";
+				if ( hlaeStatus.camexportRecording ) activeHlae += "BVH-exp ";
+				if ( hlaeStatus.camimportActive ) activeHlae += "BVH-imp ";
+				if ( !activeHlae.empty() )
+					AppendFormat( overlayText, "  |  HLAE: %s", activeHlae.c_str() );
+			}
+			else
+			{
+				AppendFormat( overlayText,
+					"\nHLAE: campath %s | mirv_input %s",
+					hlaeStatus.campathEnabled ? "ON" : "off",
+					hlaeStatus.inputCamera ? "ON" : "off" );
+				AppendFormat( overlayText,
+					"\nCAM exp %s / imp %s | AGR %s | BVH exp %s / imp %s",
+					hlaeStatus.camioExporting ? "ON" : "off",
+					hlaeStatus.camioImporting ? "ON" : "off",
+					hlaeStatus.agrRecording ? "REC" : "off",
+					hlaeStatus.camexportRecording ? "ON" : "off",
+					hlaeStatus.camimportActive ? "ON" : "off" );
+			}
 		}
 
 		const ImVec2 position( 13.0f, 13.0f );
